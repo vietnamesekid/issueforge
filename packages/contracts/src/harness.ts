@@ -1,6 +1,5 @@
 import { z } from 'zod';
-import type { RunStatus } from './common.js';
-import { Argv, HarnessName } from './common.js';
+import { Argv, HarnessName, Verdict } from './common.js';
 
 /**
  * The normalised harness event stream.
@@ -78,7 +77,7 @@ export const HarnessEvent = z.discriminatedUnion('type', [
  * schema-valid claim carries no authority whatsoever.
  */
 export const HarnessResult = z.object({
-  verdict: z.enum(['reproduced', 'cannot-reproduce', 'needs-info']),
+  verdict: Verdict,
   /**
    * Command that demonstrates the bug, as an ARGV ARRAY.
    * A real agent returned this as one space-joined string ("node --test test/x.js"),
@@ -121,4 +120,3 @@ export type HarnessEvent = z.infer<typeof HarnessEvent>;
 export type HarnessResult = z.infer<typeof HarnessResult>;
 export type HarnessRunOutcome = z.infer<typeof HarnessRunOutcome>;
 export type HarnessCapabilities = z.infer<typeof HarnessCapabilities>;
-export type { RunStatus };

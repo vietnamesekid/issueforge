@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { Argv, Sha } from './common.js';
+import { Argv, Sha, Verdict } from './common.js';
 
 /**
  * Evidence is what IssueForge OBSERVED, as distinct from what the harness claimed.
@@ -59,7 +59,7 @@ export const Evidence = z.object({
 
 /** The verdict IssueForge reached, which may contradict the harness's claim. */
 export const ValidationOutcome = z.object({
-  verdict: z.enum(['reproduced', 'cannot-reproduce', 'needs-info']),
+  verdict: Verdict,
   /** The check that decided it. */
   why: z.string().min(1),
   evidence: Evidence,

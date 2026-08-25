@@ -44,6 +44,17 @@ export const IssueKey = z.object({
   issueNumber: z.number().int().positive(),
 });
 
+/**
+ * The outcome of a reproduction attempt.
+ *
+ * Deliberately shared between what the harness CLAIMS and what IssueForge CONCLUDES
+ * after replaying the evidence. They must range over the same values or the two
+ * cannot be compared — and comparing them is the entire product: a claim of
+ * `reproduced` that independent replay downgrades to `cannot-reproduce` is the case
+ * the whole design exists to catch.
+ */
+export const Verdict = z.enum(['reproduced', 'cannot-reproduce', 'needs-info']);
+
 /** Lifecycle state of a run. */
 export const RunStatus = z.enum([
   'queued',
@@ -70,6 +81,7 @@ export type RunId = z.infer<typeof RunId>;
 export type RepoSlug = z.infer<typeof RepoSlug>;
 export type Argv = z.infer<typeof Argv>;
 export type IssueKey = z.infer<typeof IssueKey>;
+export type Verdict = z.infer<typeof Verdict>;
 export type RunStatus = z.infer<typeof RunStatus>;
 export type TaskIntent = z.infer<typeof TaskIntent>;
 export type TaskKind = z.infer<typeof TaskKind>;

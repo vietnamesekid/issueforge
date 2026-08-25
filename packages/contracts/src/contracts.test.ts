@@ -9,6 +9,8 @@ import {
   RunState,
   Sha,
   TaskCard,
+  ValidationOutcome,
+  Verdict,
 } from './index.js';
 
 const SHA = 'a'.repeat(40);
@@ -97,6 +99,17 @@ describe('HarnessResult', () => {
 
   it('rejects a verdict outside the allowed set', () => {
     expect(HarnessResult.safeParse({ verdict: 'definitely-broken' }).success).toBe(false);
+  });
+});
+
+describe('Verdict', () => {
+  it('is the SAME set for a harness claim and a validation outcome', () => {
+    // The product is comparing the two: a claim of `reproduced` that independent
+    // replay downgrades to `cannot-reproduce` is the case this design exists to
+    // catch. If the enums ever drifted apart, that comparison would be meaningless.
+    expect(Verdict.options).toEqual(HarnessResult.shape.verdict.options);
+    expect(Verdict.options).toEqual(ValidationOutcome.shape.verdict.options);
+    expect(Verdict.options).toEqual(['reproduced', 'cannot-reproduce', 'needs-info']);
   });
 });
 
