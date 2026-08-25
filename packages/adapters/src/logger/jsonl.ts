@@ -38,8 +38,9 @@ export class JsonlWriter {
 
   /** Queue one record. Order is preserved; nothing is written until a flush threshold or `flush()`. */
   write(record: unknown): void {
-    this.#buffer.push(`${JSON.stringify(redactValue(record))}\n`);
-    this.#bytesPending += this.#buffer[this.#buffer.length - 1]?.length ?? 0;
+    const line = `${JSON.stringify(redactValue(record))}\n`;
+    this.#buffer.push(line);
+    this.#bytesPending += line.length;
     if (this.#bytesPending >= this.#flushAtBytes) this.flush();
   }
 
@@ -72,7 +73,7 @@ export class JsonlWriter {
     }
   }
 
-  /** Queued but not yet written. Exposed for tests and diagnostics. */
+  /** Records queued but not yet written. */
   get pending(): number {
     return this.#buffer.length;
   }

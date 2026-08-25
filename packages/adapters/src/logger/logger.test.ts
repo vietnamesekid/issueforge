@@ -202,4 +202,28 @@ describe('suppressSqliteExperimentalWarning', () => {
     expect(seen).toContain('Something else entirely');
     expect(seen).toContain('A plain warning');
   });
+
+  it('is idempotent — repeated calls do not chain wrappers', () => {
+    // Called from the lazy sqlite loader, so it can run more than once. Each patch
+    // would otherwise wrap the previous one, and every unrelated warning would be
+    // forwarded through a growing chain.
+    const seen: string[] = [];
+    const original = process.emitWarning;
+    process.emitWarning = ((w: string | Error) => {
+      seen.push(typeof w === 'string' ? w : w.message);
+    }) as typeof process.emitWarning;
+
+    try {
+      suppressSqliteExperimentalWarning();
+      const afterFirst = process.emitWarning;
+      suppressSqliteExperimentalWarning();
+      suppressSqliteExperimentalWarning();
+      expect(process.emitWarning).toBe(afterFirst);
+
+      process.emitWarning('still delivered once');
+      expect(seen.filter((m) => m === 'still delivered once')).toHaveLength(1);
+    } finally {
+      process.emitWarning = original;
+    }
+  });
 });

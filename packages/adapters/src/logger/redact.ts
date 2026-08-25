@@ -1,3 +1,5 @@
+export const REDACTED = '[REDACTED]';
+
 /**
  * Redaction for anything written to a log, a JSONL event or a GitHub comment.
  *
@@ -11,8 +13,23 @@
  * allowlist). Treat a redaction hit as a signal that something upstream is wrong.
  */
 
-/** Patterns for credential shapes worth catching. Ordered longest-first where they overlap. */
-const PATTERNS: ReadonlyArray<{ name: string; re: RegExp }> = [
+/**
+ * One credential shape to catch.
+ *
+ * `replace` lets a pattern decide what survives redaction. Most shapes are replaced
+ * wholesale; an assignment keeps its key, because `GITHUB_TOKEN=[REDACTED]` still
+ * tells a reader which credential was involved while leaking none of it. Carrying
+ * that with the pattern avoids a name check inside the replace loop, which would
+ * grow a branch for every future pattern that needs different handling.
+ */
+interface SecretPattern {
+  readonly name: string;
+  readonly re: RegExp;
+  readonly replace?: (...groups: string[]) => string;
+}
+
+/** Credential shapes worth catching. Ordered longest-first where they overlap. */
+const PATTERNS: readonly SecretPattern[] = [
   // GitHub tokens: ghp_ (classic PAT), gho_ (OAuth), ghu_/ghs_/ghr_ (app tokens)
   { name: 'github-token', re: /\bgh[pousr]_[A-Za-z0-9]{16,}\b/g },
   { name: 'github-pat-fine-grained', re: /\bgithub_pat_[A-Za-z0-9_]{20,}\b/g },
@@ -32,22 +49,18 @@ const PATTERNS: ReadonlyArray<{ name: string; re: RegExp }> = [
   {
     name: 'assigned-secret',
     re: /\b([A-Za-z0-9_]*(?:token|secret|password|passwd|apikey|api_key|auth)[A-Za-z0-9_]*)\s*[:=]\s*("?)([^\s"']{6,})\2/gi,
+    // Keep the key and the quoting; redact only the value.
+    replace: (_match, key, quote) => `${key}=${quote}${REDACTED}${quote}`,
   },
 ];
 
-export const REDACTED = '[REDACTED]';
-
 /** Replace credential-shaped substrings. Returns the text unchanged when nothing matches. */
 export function redact(input: string): string {
-  let out = input;
-  for (const { name, re } of PATTERNS) {
+  return PATTERNS.reduce((text, { re, replace }) => {
+    // Patterns are module-level and /g, so lastIndex survives between calls.
     re.lastIndex = 0;
-    out =
-      name === 'assigned-secret'
-        ? out.replace(re, (_m, key: string, quote: string) => `${key}=${quote}${REDACTED}${quote}`)
-        : out.replace(re, REDACTED);
-  }
-  return out;
+    return replace ? text.replace(re, replace) : text.replace(re, REDACTED);
+  }, input);
 }
 
 /** True when redaction would change the text — useful as a policy signal. */
