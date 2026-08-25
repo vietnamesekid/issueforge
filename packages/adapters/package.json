@@ -18,6 +18,7 @@
   "dependencies": {
     "@issueforge/contracts": "workspace:*",
     "@issueforge/core": "workspace:*",
+    "execa": "^10.0.1",
     "pino": "^10.3.1"
   }
 }
