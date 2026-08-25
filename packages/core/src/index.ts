@@ -20,6 +20,15 @@ export { buildReproduceCard } from './domain/task-card.js';
 export { validateReproduction } from './domain/evidence-validator.js';
 export type { ValidationRequest } from './domain/evidence-validator.js';
 export type { Replayer, ReplayOptions, DefectToggle } from './ports/replay.js';
+export type { GitHubWriter } from './ports/github.js';
+export {
+  renderStatusComment,
+  statusLabelFor,
+  STATUS_LABELS,
+  ALL_STATUS_LABELS,
+  COMMENT_MARKER,
+} from './domain/status-report.js';
+export type { StatusReport } from './domain/status-report.js';
 export type { TaskCardInput } from './domain/task-card.js';
 export { HarnessContractError } from './ports/harness.js';
 export type { HarnessAdapter, HarnessRun, HarnessRunRequest } from './ports/harness.js';
