@@ -2,6 +2,7 @@ import type {
   HarnessCapabilities,
   HarnessEvent,
   HarnessRunOutcome,
+  ProcessOwnership,
   TaskCard,
 } from '@issueforge/contracts';
 
@@ -56,6 +57,14 @@ export interface HarnessRunRequest {
 export interface HarnessRun {
   /** Process group, to persist before awaiting so an orphan stays reapable. */
   readonly pgid: number;
+  /**
+   * Who owns that group, as the supervisor recorded it.
+   *
+   * Exposed rather than rebuilt by callers: the owner's start time is what makes a
+   * recycled PID safe to act on, and a caller that reconstructed it wrongly would
+   * disable that guard without any visible symptom.
+   */
+  readonly ownership: ProcessOwnership;
   events(): AsyncIterable<HarnessEvent>;
   /** Resolves once the process has exited and the stream is drained. */
   outcome(): Promise<HarnessRunOutcome>;

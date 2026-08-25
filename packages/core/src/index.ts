@@ -14,6 +14,10 @@ export type {
   TaskAttemptOutcome,
 } from './ports/run-store.js';
 export { isTerminal, mayHoldProcesses } from './domain/run-status.js';
+export { classifyAttempt, classifyFailure } from './domain/reproduce-outcome.js';
+export type { AttemptClassification, AttemptFailure } from './domain/reproduce-outcome.js';
+export { buildReproduceCard } from './domain/task-card.js';
+export type { TaskCardInput } from './domain/task-card.js';
 export { HarnessContractError } from './ports/harness.js';
 export type { HarnessAdapter, HarnessRun, HarnessRunRequest } from './ports/harness.js';
 export { WorkspaceError } from './ports/workspace.js';

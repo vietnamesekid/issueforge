@@ -9,3 +9,4 @@ export * from './state/index.js';
 export * from './process/index.js';
 export * from './harness/index.js';
 export * from './workspace/index.js';
+export * from './runner/index.js';

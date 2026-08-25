@@ -19,6 +19,6 @@
     "@issueforge/contracts": "workspace:*"
   },
   "devDependencies": {
-    "@types/node": "^22.10.0"
+    "@types/node": "catalog:"
   }
 }

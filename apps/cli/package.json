@@ -23,6 +23,6 @@
     "commander": "^12.1.0"
   },
   "devDependencies": {
-    "@types/node": "^22.10.0"
+    "@types/node": "catalog:"
   }
 }

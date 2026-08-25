@@ -1,3 +1,10 @@
 packages:
   - "apps/*"
   - "packages/*"
+
+# Versions for dependencies used by more than one package. Manifests refer to these
+# as `catalog:`, so a bump happens here once instead of drifting per package.
+catalog:
+  # Node globals (AbortSignal, process, Buffer) are not in `lib`; tsconfig.base.json
+  # names this in `types`, so every package must resolve the same copy.
+  "@types/node": ^22.10.0

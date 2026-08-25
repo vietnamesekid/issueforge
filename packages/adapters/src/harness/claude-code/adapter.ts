@@ -1,7 +1,5 @@
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import { writeFileSync, mkdirSync } from 'node:fs';
-import { dirname, join } from 'node:path';
 import type { HarnessCapabilities, HarnessEvent, HarnessRunOutcome } from '@issueforge/contracts';
 import { HarnessContractError, type HarnessAdapter, type HarnessRun, type HarnessRunRequest } from '@issueforge/core';
 import { spawnSupervised, type SupervisedProcess } from '../../process/index.js';
@@ -42,8 +40,9 @@ export class ClaudeCodeAdapter implements HarnessAdapter {
   }
 
   run(request: HarnessRunRequest): HarnessRun {
-    writeTaskCard(request);
-
+    // The task card is written by the caller, not here: every adapter needs it on
+    // disk before starting, and leaving that to each one means the second adapter
+    // can forget. The runner owns the precondition.
     const argv = buildClaudeArgv({
       taskCardPath: request.taskCardPath,
       resultSchema: request.resultSchema,
@@ -90,6 +89,10 @@ class ClaudeCodeRun implements HarnessRun {
 
   get pgid(): number {
     return this.#child.pgid;
+  }
+
+  get ownership() {
+    return this.#child.ownership;
   }
 
   async *events(): AsyncIterable<HarnessEvent> {
@@ -168,8 +171,3 @@ function isAllowed(tool: string): boolean {
   return DEFAULT_ALLOWED_TOOLS.some((allowed) => allowed === tool || allowed.startsWith(`${tool}(`));
 }
 
-function writeTaskCard(request: HarnessRunRequest): void {
-  const path = join(request.cwd, request.taskCardPath);
-  mkdirSync(dirname(path), { recursive: true });
-  writeFileSync(path, JSON.stringify(request.taskCard, null, 2));
-}

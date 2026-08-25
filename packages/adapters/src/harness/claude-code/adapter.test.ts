@@ -1,19 +1,12 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import {
-  chmodSync,
-  existsSync,
-  mkdirSync,
-  mkdtempSync,
-  readFileSync,
-  rmSync,
-  writeFileSync,
-} from 'node:fs';
+import { chmodSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { TaskCard } from '@issueforge/contracts';
 import { TaskCard as TaskCardSchema } from '@issueforge/contracts';
 import { HarnessContractError } from '@issueforge/core';
 import { ClaudeCodeAdapter } from './adapter.js';
+import { buildClaudeArgv } from './argv.js';
 
 let dir: string;
 beforeEach(() => { dir = mkdtempSync(join(tmpdir(), 'if-harness-')); });
@@ -73,13 +66,26 @@ describe('ClaudeCodeAdapter', { timeout: 20_000 }, () => {
   const originalPath = process.env['PATH'];
   afterEach(() => { process.env['PATH'] = originalPath; });
 
-  it('writes the task card to disk so the issue is never argv', () => {
+  it('references the task card by path rather than passing the issue as argv', () => {
+    // The card is written by the runner — a precondition every adapter shares, so
+    // leaving it to each one means the second adapter eventually forgets. What the
+    // adapter guarantees is that attacker-authored text never reaches argv.
     fakeClaude([initLine(), resultLine({ verdict: 'needs-info', summary: '' })]);
-    new ClaudeCodeAdapter().run(request());
+    writeFileSync(join(dir, 'task-card.json'), JSON.stringify(card));
 
-    const written = JSON.parse(readFileSync(join(dir, 'task-card.json'), 'utf8')) as TaskCard;
-    expect(written.issue.body).toBe('it breaks');
-    expect(written.instructions).toMatch(/UNTRUSTED/);
+    const hostile = TaskCardSchema.parse({
+      ...card,
+      issue: { number: 1, title: '$(touch /tmp/pwned)', body: '`id`; rm -rf /' },
+    });
+    const argv = buildClaudeArgv({
+      taskCardPath: 'task-card.json',
+      resultSchema: {},
+      sessionId: 's',
+      card: hostile,
+    });
+
+    expect(argv.join(' ')).not.toContain('rm -rf');
+    expect(argv.some((a) => a.includes('task-card.json'))).toBe(true);
   });
 
   it('streams normalised events and reports a schema-valid claim', async () => {
@@ -206,6 +212,5 @@ describe('ClaudeCodeAdapter', { timeout: 20_000 }, () => {
     run.cancel();
     const outcome = await run.outcome();
     expect(outcome.ok).toBe(false);
-    expect(existsSync(join(dir, 'task-card.json'))).toBe(true);
   });
 });
