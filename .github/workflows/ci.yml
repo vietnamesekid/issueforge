@@ -26,10 +26,11 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
-      # Build first: packages consume each other's emitted .d.ts files.
-      - run: pnpm build
-
+      # `tsc --build` follows the project-reference graph and builds packages in
+      # dependency order, so typecheck no longer needs a prior build step.
       - run: pnpm typecheck
+
+      - run: pnpm build
 
       - run: pnpm lint
 

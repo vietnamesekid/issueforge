@@ -1,6 +1,8 @@
 {
-  "extends": "./tsconfig.base.json",
-  "include": [],
+  // Solution file: `tsc --build` from the root builds every package in dependency
+  // order. Editors use the same graph, so a sibling package resolves from source and
+  // does not require a prior `pnpm build`.
+  "files": [],
   "references": [
     { "path": "./packages/contracts" },
     { "path": "./packages/core" },

@@ -1,5 +1,17 @@
 {
   "extends": "../../tsconfig.base.json",
-  "compilerOptions": { "rootDir": "src", "outDir": "dist", "noEmit": false },
-  "include": ["src/**/*.ts"]
+  "compilerOptions": {
+    "rootDir": "src",
+    // Type-checked only. The runnable bundle (with its shebang) comes from tsup, so
+    // emitting here would overwrite it — and nothing imports the CLI, so no other
+    // package needs its declarations.
+    "outDir": "dist/types",
+    "emitDeclarationOnly": true
+  },
+  "include": ["src/**/*.ts"],
+  "references": [
+    { "path": "../../packages/contracts" },
+    { "path": "../../packages/core" },
+    { "path": "../../packages/adapters" }
+  ]
 }

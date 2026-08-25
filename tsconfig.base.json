@@ -22,6 +22,10 @@
     "verbatimModuleSyntax": true,
     "isolatedModules": true,
 
+    // Required for project references: `composite` makes a package citable by
+    // another, and declarationMap lets an editor jump to the original source rather
+    // than to generated .d.ts.
+    "composite": true,
     "declaration": true,
     "declarationMap": true,
     "sourceMap": true,

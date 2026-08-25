@@ -8,9 +8,13 @@
 
 ```bash
 pnpm install
-pnpm build      # packages consume each other's emitted .d.ts, so build before typecheck
 pnpm check      # typecheck + lint + test
 ```
+
+The packages use TypeScript project references, so `tsc --build` resolves a sibling package from its
+source and builds dependencies in the right order. That means a fresh clone typechecks without a
+separate build step, and an editor never reports *"Could not find a declaration file for module
+'@issueforge/core'"* just because `dist/` happens to be missing.
 
 ## Dev loop
 
