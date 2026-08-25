@@ -16,3 +16,5 @@ export type {
 export { isTerminal, mayHoldProcesses } from './domain/run-status.js';
 export { HarnessContractError } from './ports/harness.js';
 export type { HarnessAdapter, HarnessRun, HarnessRunRequest } from './ports/harness.js';
+export { WorkspaceError } from './ports/workspace.js';
+export type { Workspace, WorkspaceManager, WorkspaceRequest } from './ports/workspace.js';

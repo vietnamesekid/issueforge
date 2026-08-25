@@ -21,5 +21,8 @@
     "@issueforge/contracts": "workspace:*",
     "@issueforge/core": "workspace:*",
     "commander": "^12.1.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0"
   }
 }

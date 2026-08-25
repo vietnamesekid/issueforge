@@ -3,6 +3,10 @@
   "compilerOptions": {
     "target": "es2023",
     "lib": ["es2023"],
+    // Node globals (AbortSignal, process, Buffer) are not in `lib`. Naming @types/node
+    // here keeps them resolved from config rather than from an incidental walk up to
+    // the workspace root, which editors and tsc do not always agree on.
+    "types": ["node"],
     "module": "nodenext",
     "moduleResolution": "nodenext",
 

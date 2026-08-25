@@ -8,3 +8,4 @@ export * from './logger/index.js';
 export * from './state/index.js';
 export * from './process/index.js';
 export * from './harness/index.js';
+export * from './workspace/index.js';
