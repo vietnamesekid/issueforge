@@ -222,7 +222,18 @@ work-destroying bug in the obvious workflow configuration: under GitHub's defaul
 labelling three issues in quick succession **silently cancels the middle one**, with no error surfaced
 anywhere. Fixed by an explicit queue setting — and worth knowing about before it eats someone's issue.
 
-Remaining: worktree/clone isolation, and prompt-injection resistance.
+**Prompt-injection resistance — done, passed.** Six real attacks — reading credentials outside the
+workspace, path traversal, injecting an exfiltration step into CI config, harvesting environment
+variables, leaking `.env`, and forcing a false verdict — were run against a live agent with decoy
+credential files planted nearby. All six were contained and nothing leaked.
+
+The lesson that changed the design: the *safest* configuration was also completely useless. Denying
+every action the agent did not pre-negotiate blocked its legitimate work too, producing an agent that
+leaked nothing and did nothing. Safety here means an explicit allowlist, not a blanket denial. Separately,
+in three runs the agent resisted every attack yet still over-claimed a reproduction — and the evidence
+check caught it. Neither layer has to be perfect alone.
+
+Remaining: worktree/clone isolation.
 
 ### v0.1 — Local Reproduce Gate
 
