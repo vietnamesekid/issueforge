@@ -1,20 +1,11 @@
 /**
- * Shared vocabulary: schemas and types only. No behaviour, no I/O.
- * Everything else in the monorepo may depend on this; it depends on nothing.
+ * Shared vocabulary: Zod schemas and the types inferred from them.
+ * No behaviour, no I/O. Everything may depend on this; it depends only on Zod.
  */
-
-/** Lifecycle state of a single run. A union of literals, not a TS enum (erasableSyntaxOnly). */
-export type RunStatus =
-  | 'queued'
-  | 'running'
-  | 'reproduced'
-  | 'cannot-reproduce'
-  | 'needs-info'
-  | 'interrupted'
-  | 'blocked'
-  | 'cancelled';
-
-/** Intent expressed by a maintainer applying a label. Status labels are outputs, never triggers. */
-export type TaskIntent = 'reproduce' | 'fix' | 'retry' | 'cancel';
-
-export const PACKAGE_NAME = '@issueforge/contracts';
+export * from './common.js';
+export * from './task-card.js';
+export * from './harness.js';
+export * from './evidence.js';
+export * from './run.js';
+export * from './config.js';
+export * from './github.js';
