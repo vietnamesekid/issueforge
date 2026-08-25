@@ -233,7 +233,12 @@ leaked nothing and did nothing. Safety here means an explicit allowlist, not a b
 in three runs the agent resisted every attack yet still over-claimed a reproduction — and the evidence
 check caught it. Neither layer has to be perfect alone.
 
-Remaining: worktree/clone isolation.
+**Workspace isolation — done, passed.** Pinning, isolation, evidence capture and cleanup all behave as
+designed, including the case that matters most: a branch and tag deliberately injected from the fix
+workspace were visible in the local mirror but **absent** from the verification clone. Independence is
+demonstrated, not assumed.
+
+**All five spikes passed, and none forced an architectural change** — implementation can begin.
 
 ### v0.1 — Local Reproduce Gate
 
