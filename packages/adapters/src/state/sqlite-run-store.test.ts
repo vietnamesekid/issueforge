@@ -1,13 +1,18 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { existsSync, mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { RunState } from '@issueforge/contracts';
 import { spawn } from 'node:child_process';
 import { SqliteRunStore } from './sqlite-run-store.js';
 
-/** Built entry point, used by the cross-process test below. */
+/**
+ * Entry point for the cross-process test below. Child processes cannot import
+ * TypeScript, so it runs against the built output; `pnpm build` precedes `pnpm test`
+ * in CI.
+ */
 const distEntry = new URL('../../dist/index.js', import.meta.url).pathname;
+const hasBuild = existsSync(distEntry);
 import { SCHEMA_VERSION } from './migrations.js';
 
 const SHA = 'a'.repeat(40);
@@ -111,16 +116,25 @@ describe('durability — the database is the source of truth, not the process', 
     reopened.close();
   });
 
-  it('two real PROCESSES can cold-start against the same new database', async () => {
-    // The single-process test below passes even when concurrent startup is broken,
-    // because both connections live in one process. Converting a fresh database to
-    // WAL takes an exclusive lock, and before busy_timeout was moved ahead of that
-    // conversion this failed in 6 of 8 attempts with "database is locked".
+  it.skipIf(!hasBuild)('two real PROCESSES can cold-start and migrate the same new database', async () => {
+    // Guards two distinct races that only appear across real processes:
     //
-    // The children must run CONCURRENTLY: spawnSync would start them one after the
-    // other, and a sequential pair never races, so such a test passes against the
-    // broken ordering and proves nothing.
-    const racePath = join(dir, 'race', 'state.db');
+    //  1. WAL conversion — converting a fresh database takes an exclusive lock, and
+    //     before busy_timeout was ordered ahead of it this failed in 6 of 8 attempts
+    //     with "database is locked".
+    //  2. Concurrent migration — both processes read user_version = 0, both ran
+    //     migration 1, and the loser failed with "table runs already exists". Fixed
+    //     by re-reading the version inside the write transaction.
+    //
+    // The single-process test below catches neither: both its connections live in
+    // one process. The children must also run CONCURRENTLY — spawnSync starts them
+    // sequentially, and a sequential pair never races, so such a test passes against
+    // the broken code and proves nothing.
+    // Its own directory, not the shared `dir`: afterEach removes that one, and a
+    // child still exiting when the removal lands would fail for that reason instead
+    // of the one under test.
+    const raceDir = mkdtempSync(join(tmpdir(), 'if-race-'));
+    const racePath = join(raceDir, 'state.db');
     const script = `
       const { SqliteRunStore } = await import(${JSON.stringify(distEntry)});
       const s = new SqliteRunStore(${JSON.stringify(racePath)});
@@ -139,11 +153,18 @@ describe('durability — the database is the source of truth, not the process', 
         child.on('exit', (code) => resolve({ code, stderr }));
       });
 
-    const results = await Promise.all([run(), run()]);
+    try {
+      // Four rather than two: a race is probabilistic, and with two processes the
+      // migration bug reproduced in only 2 of 5 runs — too weak to defend a fix in
+      // CI. Four makes the collision near-certain while staying fast.
+      const results = await Promise.all([run(), run(), run(), run()]);
 
-    for (const r of results) {
-      expect(r.stderr).not.toMatch(/database is locked/i);
-      expect(r.code).toBe(0);
+      for (const r of results) {
+        expect(r.stderr, r.stderr).not.toMatch(/database is locked/i);
+        expect(r.code, r.stderr).toBe(0);
+      }
+    } finally {
+      rmSync(raceDir, { recursive: true, force: true });
     }
   });
 
@@ -177,7 +198,7 @@ describe('issue locks', () => {
 
     expect(first).toBe(true);
     expect(second).toBe(false); // mutual exclusion comes from the PRIMARY KEY, not a read-then-write
-    expect(store.getLock('owner/repo', 7)?.runId).toBe('run_aaa111');
+    expect(store.getLock({ repo: 'owner/repo', issueNumber: 7 })?.runId).toBe('run_aaa111');
   });
 
   it('allows concurrent runs on different issues', () => {
@@ -187,8 +208,8 @@ describe('issue locks', () => {
 
   it('releases so a later run can take the issue', () => {
     store.tryAcquireLock({ repo: 'owner/repo', issueNumber: 7, runId: 'run_aaa111', acquiredAt: 1 });
-    store.releaseLock('owner/repo', 7);
-    expect(store.getLock('owner/repo', 7)).toBeNull();
+    store.releaseLock({ repo: 'owner/repo', issueNumber: 7 });
+    expect(store.getLock({ repo: 'owner/repo', issueNumber: 7 })).toBeNull();
     expect(store.tryAcquireLock({ repo: 'owner/repo', issueNumber: 7, runId: 'run_bbb222', acquiredAt: 3 })).toBe(true);
   });
 });

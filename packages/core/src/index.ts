@@ -8,12 +8,7 @@
  */
 import type { RunStatus } from '@issueforge/contracts';
 
-export type {
-  RunStore,
-  RunPatch,
-  RunFilter,
-  ArtifactRecord,
-} from './ports/run-store.js';
+export type { RunStore, RunPatch, RunFilter } from './ports/run-store.js';
 
 /** Terminal states hold no lock and will not advance without new maintainer intent. */
 const TERMINAL: readonly RunStatus[] = [

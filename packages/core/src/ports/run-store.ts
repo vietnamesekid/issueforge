@@ -1,4 +1,13 @@
-import type { IssueLock, ProcessOwnership, RunId, RunState, RunStatus } from '@issueforge/contracts';
+import type {
+  ArtifactRecord,
+  IssueKey,
+  IssueLock,
+  ProcessOwnership,
+  RepoSlug,
+  RunId,
+  RunState,
+  RunStatus,
+} from '@issueforge/contracts';
 
 /**
  * The persistence port. `core` declares it; an adapter implements it.
@@ -36,9 +45,9 @@ export interface RunStore {
    */
   tryAcquireLock(lock: IssueLock): boolean;
 
-  releaseLock(repo: string, issueNumber: number): void;
+  releaseLock(issue: IssueKey): void;
 
-  getLock(repo: string, issueNumber: number): IssueLock | null;
+  getLock(issue: IssueKey): IssueLock | null;
 
   /**
    * Runs whose process group may still be alive. Used by the reaper on every
@@ -63,17 +72,9 @@ export interface RunPatch {
 }
 
 export interface RunFilter {
-  repo?: string;
+  repo?: RepoSlug;
   issueNumber?: number;
   status?: RunStatus | RunStatus[];
   limit?: number;
 }
 
-export interface ArtifactRecord {
-  runId: RunId;
-  path: string;
-  kind: 'patch' | 'result' | 'events' | 'log' | 'other';
-  checksum?: string;
-  bytes?: number;
-  createdAt: number;
-}

@@ -32,6 +32,18 @@ export const RepoSlug = z
  */
 export const Argv = z.array(z.string().min(1)).min(1, 'expected a non-empty argv array');
 
+/**
+ * Which issue a run belongs to.
+ *
+ * `repo` and `issueNumber` are meaningless apart — together they are the identity
+ * that scopes locks, filters and workspaces. Naming that pair gives the concept
+ * somewhere to live instead of threading two loose parameters through every call.
+ */
+export const IssueKey = z.object({
+  repo: RepoSlug,
+  issueNumber: z.number().int().positive(),
+});
+
 /** Lifecycle state of a run. */
 export const RunStatus = z.enum([
   'queued',
@@ -57,6 +69,7 @@ export type Sha = z.infer<typeof Sha>;
 export type RunId = z.infer<typeof RunId>;
 export type RepoSlug = z.infer<typeof RepoSlug>;
 export type Argv = z.infer<typeof Argv>;
+export type IssueKey = z.infer<typeof IssueKey>;
 export type RunStatus = z.infer<typeof RunStatus>;
 export type TaskIntent = z.infer<typeof TaskIntent>;
 export type TaskKind = z.infer<typeof TaskKind>;
