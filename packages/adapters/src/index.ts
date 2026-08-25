@@ -4,4 +4,4 @@
  *
  * Boundary rule: harness adapters must not import the GitHub adapter, and vice versa.
  */
-export const ADAPTERS_READY = false;
+export * from './logger/index.js';
