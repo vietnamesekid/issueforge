@@ -59,6 +59,30 @@ export const MIGRATIONS: readonly string[] = [
   ) STRICT;
 
   CREATE INDEX idx_artifacts_run ON artifacts (run_id);
+
+  -- One row per harness invocation. A run can attempt more than once (retry), and
+  -- each attempt has its own process, exit state, duration and cost — so this is
+  -- where "what actually happened, and how many times" lives. The runs table holds
+  -- only the current state; without this, a retry would overwrite the record of why
+  -- the previous attempt failed.
+  CREATE TABLE tasks (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    run_id       TEXT NOT NULL REFERENCES runs (id) ON DELETE CASCADE,
+    attempt      INTEGER NOT NULL,
+    harness      TEXT,
+    -- Process group of this attempt, for post-hoc diagnosis. Live-process tracking
+    -- stays on 'runs', which is what the reaper reads.
+    pgid         INTEGER,
+    exit_code    INTEGER,
+    -- Why the attempt ended: completed | timeout | cancelled | budget | error.
+    outcome      TEXT,
+    cost_usd     REAL,
+    started_at   INTEGER NOT NULL,
+    ended_at     INTEGER
+  ) STRICT;
+
+  CREATE INDEX idx_tasks_run ON tasks (run_id);
+  CREATE UNIQUE INDEX idx_tasks_attempt ON tasks (run_id, attempt);
   `,
 ];
 

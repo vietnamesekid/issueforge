@@ -10,10 +10,11 @@
   "scripts": {
     "build": "pnpm -r --filter './packages/**' --filter './apps/**' build",
     "typecheck": "tsc --noEmit && pnpm -r typecheck",
-    "test": "vitest run",
+    "test": "pnpm build && vitest run",
     "test:watch": "vitest",
     "lint": "eslint .",
-    "check": "pnpm typecheck && pnpm lint && pnpm test"
+    "check": "pnpm typecheck && pnpm lint && pnpm test",
+    "test:unit": "vitest run"
   },
   "devDependencies": {
     "@types/node": "^22.10.0",

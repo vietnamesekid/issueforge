@@ -7,5 +7,10 @@
  * domain stays testable without a filesystem, a database, a network or a subprocess.
  * Enforced by tests/import-boundaries.test.ts.
  */
-export type { RunStore, RunPatch, RunFilter } from './ports/run-store.js';
+export type {
+  RunStore,
+  RunPatch,
+  RunFilter,
+  TaskAttemptOutcome,
+} from './ports/run-store.js';
 export { isTerminal, mayHoldProcesses } from './domain/run-status.js';

@@ -3,6 +3,7 @@ import type {
   IssueLock,
   ProcessOwnership,
   RunState,
+  TaskAttempt,
 } from '@issueforge/contracts';
 import { RunState as RunStateSchema } from '@issueforge/contracts';
 
@@ -40,6 +41,18 @@ export interface LockRow {
   issue_number: number;
   run_id: string;
   acquired_at: number;
+}
+
+export interface TaskRow {
+  run_id: string;
+  attempt: number;
+  harness: string | null;
+  pgid: number | null;
+  exit_code: number | null;
+  outcome: string | null;
+  cost_usd: number | null;
+  started_at: number;
+  ended_at: number | null;
 }
 
 export interface ArtifactRow {
@@ -101,6 +114,20 @@ export function toIssueLock(row: LockRow): IssueLock {
     issueNumber: row.issue_number,
     runId: row.run_id,
     acquiredAt: row.acquired_at,
+  };
+}
+
+export function toTaskAttempt(row: TaskRow): TaskAttempt {
+  return {
+    runId: row.run_id,
+    attempt: row.attempt,
+    startedAt: row.started_at,
+    ...optional('harness', row.harness as TaskAttempt['harness'] | null),
+    ...optional('pgid', row.pgid),
+    ...optional('exitCode', row.exit_code),
+    ...optional('outcome', row.outcome as TaskAttempt['outcome'] | null),
+    ...optional('costUsd', row.cost_usd),
+    ...optional('endedAt', row.ended_at),
   };
 }
 

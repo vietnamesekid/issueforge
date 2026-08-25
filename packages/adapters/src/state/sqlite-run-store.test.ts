@@ -8,11 +8,17 @@ import { SqliteRunStore } from './sqlite-run-store.js';
 
 /**
  * Entry point for the cross-process test below. Child processes cannot import
- * TypeScript, so it runs against the built output; `pnpm build` precedes `pnpm test`
- * in CI.
+ * TypeScript, so it runs against the built output — `pnpm test` builds first.
+ *
+ * It skips rather than fails when `dist/` is absent (someone running `vitest` alone),
+ * but announces itself, because this is the only test that exercises two real
+ * processes and a silent skip would hide the loss of that coverage.
  */
 const distEntry = new URL('../../dist/index.js', import.meta.url).pathname;
 const hasBuild = existsSync(distEntry);
+if (!hasBuild) {
+  console.warn('[sqlite-run-store] dist/ missing — skipping the cross-process race test. Run `pnpm build` first.');
+}
 import { SCHEMA_VERSION } from './migrations.js';
 
 const SHA = 'a'.repeat(40);
@@ -247,6 +253,59 @@ describe('process ownership and reaping', () => {
   it('a run that never spawned anything is not a reap candidate', () => {
     store.createRun(makeRun({ status: 'queued' }));
     expect(store.listReapCandidates()).toHaveLength(0);
+  });
+});
+
+describe('task attempts', () => {
+  beforeEach(() => store.createRun(makeRun()));
+
+  it('records one row per attempt so a retry adds history instead of erasing it', () => {
+    // `runs` holds only the CURRENT state. Without per-attempt rows, retrying an
+    // issue would overwrite the record of why the previous attempt failed — which is
+    // exactly what a maintainer needs to see before retrying again.
+    store.startAttempt({ runId: 'run_a1b2c3', attempt: 1, harness: 'claude-code', startedAt: 10 });
+    store.finishAttempt('run_a1b2c3', { outcome: 'timeout', exitCode: 143, endedAt: 20 });
+
+    store.startAttempt({ runId: 'run_a1b2c3', attempt: 2, harness: 'claude-code', startedAt: 30 });
+    store.finishAttempt('run_a1b2c3', { outcome: 'completed', exitCode: 0, costUsd: 0.42, endedAt: 40 });
+
+    const attempts = store.listAttempts('run_a1b2c3');
+    expect(attempts.map((a) => a.attempt)).toEqual([1, 2]);
+    expect(attempts[0]?.outcome).toBe('timeout');   // first failure still legible
+    expect(attempts[0]?.exitCode).toBe(143);
+    expect(attempts[1]?.outcome).toBe('completed');
+    expect(attempts[1]?.costUsd).toBe(0.42);
+  });
+
+  it('finishAttempt closes the latest attempt, not an earlier one', () => {
+    store.startAttempt({ runId: 'run_a1b2c3', attempt: 1, startedAt: 10 });
+    store.finishAttempt('run_a1b2c3', { outcome: 'error', endedAt: 20 });
+    store.startAttempt({ runId: 'run_a1b2c3', attempt: 2, startedAt: 30 });
+    store.finishAttempt('run_a1b2c3', { outcome: 'cancelled', endedAt: 40 });
+
+    const [first, second] = store.listAttempts('run_a1b2c3');
+    expect(first?.outcome).toBe('error');       // untouched by the second finish
+    expect(second?.outcome).toBe('cancelled');
+  });
+
+  it('rejects a duplicate attempt number for the same run', () => {
+    // A unique index, not a check in code: two supervisors racing the same retry
+    // must not both claim attempt 2.
+    store.startAttempt({ runId: 'run_a1b2c3', attempt: 1, startedAt: 10 });
+    expect(() => store.startAttempt({ runId: 'run_a1b2c3', attempt: 1, startedAt: 11 })).toThrow();
+  });
+
+  it('leaves an in-flight attempt open until it is finished', () => {
+    // A supervisor killed mid-run cannot close its own row, so an attempt with no
+    // outcome is the signal that something ended abruptly.
+    store.startAttempt({ runId: 'run_a1b2c3', attempt: 1, startedAt: 10 });
+    const [open] = store.listAttempts('run_a1b2c3');
+    expect(open?.outcome).toBeUndefined();
+    expect(open?.endedAt).toBeUndefined();
+  });
+
+  it('rejects an attempt for a run that does not exist', () => {
+    expect(() => store.startAttempt({ runId: 'run_ghost1', attempt: 1, startedAt: 1 })).toThrow();
   });
 });
 

@@ -7,17 +7,20 @@ import type {
   ProcessOwnership,
   RunId,
   RunState,
+  TaskAttempt,
 } from '@issueforge/contracts';
-import type { RunFilter, RunPatch, RunStore } from '@issueforge/core';
+import type { RunFilter, RunPatch, RunStore, TaskAttemptOutcome } from '@issueforge/core';
 import { MIGRATIONS } from './migrations.js';
 import { loadSqlite, type Database } from './sqlite-loader.js';
 import {
   toArtifactRecord,
   toIssueLock,
   toRunState,
+  toTaskAttempt,
   type ArtifactRow,
   type LockRow,
   type RunRow,
+  type TaskRow,
 } from './rows.js';
 import { ClauseList, placeholders, toArray } from './sql.js';
 
@@ -183,6 +186,52 @@ export class SqliteRunStore implements RunStore {
     return this.#queryAll<RunRow>('SELECT * FROM runs WHERE pgid IS NOT NULL AND owner_pid IS NOT NULL')
       .map(toRunState)
       .flatMap((run) => (run.ownership ? [{ run, ownership: run.ownership }] : []));
+  }
+
+  startAttempt(attempt: TaskAttempt): void {
+    this.#db
+      .prepare(
+        `INSERT INTO tasks (run_id, attempt, harness, pgid, exit_code, outcome, cost_usd,
+                            started_at, ended_at)
+         VALUES (${placeholders(9)})`,
+      )
+      .run(
+        attempt.runId,
+        attempt.attempt,
+        attempt.harness ?? null,
+        attempt.pgid ?? null,
+        attempt.exitCode ?? null,
+        attempt.outcome ?? null,
+        attempt.costUsd ?? null,
+        attempt.startedAt,
+        attempt.endedAt ?? null,
+      );
+  }
+
+  finishAttempt(runId: RunId, outcome: TaskAttemptOutcome): void {
+    // Targets the highest attempt number rather than taking one as a parameter: the
+    // caller is the supervisor that just started it, and threading the number back
+    // through would be one more thing to get out of step.
+    this.#db
+      .prepare(
+        `UPDATE tasks SET outcome = ?, exit_code = ?, cost_usd = ?, ended_at = ?
+         WHERE run_id = ? AND attempt = (SELECT MAX(attempt) FROM tasks WHERE run_id = ?)`,
+      )
+      .run(
+        outcome.outcome,
+        outcome.exitCode ?? null,
+        outcome.costUsd ?? null,
+        outcome.endedAt,
+        runId,
+        runId,
+      );
+  }
+
+  listAttempts(runId: RunId): TaskAttempt[] {
+    return this.#queryAll<TaskRow>(
+      'SELECT * FROM tasks WHERE run_id = ? ORDER BY attempt ASC',
+      runId,
+    ).map(toTaskAttempt);
   }
 
   recordArtifact(artifact: ArtifactRecord): void {

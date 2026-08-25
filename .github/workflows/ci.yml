@@ -33,8 +33,8 @@ jobs:
 
       - run: pnpm lint
 
-      # Includes the import-boundary check, which fails CI on a dependency-direction
-      # violation (e.g. core importing an adapter or node:fs).
+      # Includes the import-boundary check (fails CI on a dependency-direction
+      # violation) and the cross-process race test, which runs against dist/.
       - run: pnpm test
 
       - name: CLI smoke test

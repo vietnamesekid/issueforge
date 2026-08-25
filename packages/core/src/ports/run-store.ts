@@ -7,6 +7,8 @@ import type {
   RunId,
   RunState,
   RunStatus,
+  TaskAttempt,
+  TaskOutcome,
 } from '@issueforge/contracts';
 
 /**
@@ -56,11 +58,30 @@ export interface RunStore {
    */
   listReapCandidates(): Array<{ run: RunState; ownership: ProcessOwnership }>;
 
+  /**
+   * Record a harness invocation. One row per attempt, so a retry adds history rather
+   * than overwriting why the previous attempt failed.
+   */
+  startAttempt(attempt: TaskAttempt): void;
+
+  /** Close out the most recent attempt for a run with how it ended. */
+  finishAttempt(runId: RunId, outcome: TaskAttemptOutcome): void;
+
+  listAttempts(runId: RunId): TaskAttempt[];
+
   recordArtifact(artifact: ArtifactRecord): void;
 
   listArtifacts(runId: RunId): ArtifactRecord[];
 
   close(): void;
+}
+
+/** How an attempt ended. Everything here is known only once the process is gone. */
+export interface TaskAttemptOutcome {
+  outcome: TaskOutcome;
+  exitCode?: number;
+  costUsd?: number;
+  endedAt: number;
 }
 
 export interface RunPatch {

@@ -39,6 +39,32 @@ export const RunState = z.object({
   detail: z.string().optional(),
 });
 
+/** Why a single harness invocation ended. */
+export const TaskOutcome = z.enum(['completed', 'timeout', 'cancelled', 'budget', 'error']);
+
+/**
+ * One harness invocation.
+ *
+ * A run can attempt more than once — `issueforge:retry` is an intent label — and each
+ * attempt has its own process, exit state, duration and cost. `RunState` holds only
+ * the *current* state, so without this a retry would erase the record of why the
+ * previous attempt failed.
+ */
+export const TaskAttempt = z.object({
+  runId: RunId,
+  /** 1-based, unique per run. */
+  attempt: z.number().int().positive(),
+  harness: HarnessName.optional(),
+  /** Process group of this attempt, kept for post-hoc diagnosis. */
+  pgid: z.number().int().positive().optional(),
+  exitCode: z.number().int().optional(),
+  outcome: TaskOutcome.optional(),
+  /** Client-side estimate where the harness reports one; never billed from. */
+  costUsd: z.number().nonnegative().optional(),
+  startedAt: z.number().int().nonnegative(),
+  endedAt: z.number().int().nonnegative().optional(),
+});
+
 /** A file a run produced, tracked so retention can find and remove it later. */
 export const ArtifactRecord = z.object({
   runId: RunId,
@@ -61,3 +87,5 @@ export type ProcessOwnership = z.infer<typeof ProcessOwnership>;
 export type RunState = z.infer<typeof RunState>;
 export type IssueLock = z.infer<typeof IssueLock>;
 export type ArtifactRecord = z.infer<typeof ArtifactRecord>;
+export type TaskAttempt = z.infer<typeof TaskAttempt>;
+export type TaskOutcome = z.infer<typeof TaskOutcome>;
