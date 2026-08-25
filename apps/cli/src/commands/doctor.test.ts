@@ -5,19 +5,25 @@ describe('doctor', () => {
   it('checks everything a run depends on', () => {
     const names = runDoctor().map((r) => r.name);
     expect(names).toEqual(
-      expect.arrayContaining(['node', 'git', 'gh', 'gh auth', 'claude', 'api key', 'home']),
+      expect.arrayContaining(['node', 'git', 'gh', 'gh auth', 'claude', 'harness auth', 'home']),
     );
   });
 
-  it('treats a missing ANTHROPIC_API_KEY as blocking, not a warning', () => {
-    // --bare never reads an interactive login, so a logged-in developer still needs
-    // the key. Without a blocking check they discover that when a run stalls.
+  it('accepts an existing interactive login instead of demanding an API key', () => {
+    // Reusing the Claude Code installation and authentication a developer already
+    // has is the point of the product. Demanding a separate key from someone already
+    // signed in would break that promise and cost them twice.
     const saved = process.env['ANTHROPIC_API_KEY'];
     delete process.env['ANTHROPIC_API_KEY'];
     try {
-      const key = runDoctor().find((r) => r.name === 'api key');
-      expect(key?.level).toBe('blocked');
-      expect(key?.fix).toMatch(/--bare/);
+      const auth = runDoctor().find((r) => r.name === 'harness auth');
+      // On a machine with Claude Code signed in this passes; on one without, it
+      // blocks with a fix naming both routes.
+      if (auth?.level === 'blocked') {
+        expect(auth.fix).toMatch(/sign in|ANTHROPIC_API_KEY/);
+      } else {
+        expect(auth?.detail).toMatch(/signed in/);
+      }
     } finally {
       if (saved !== undefined) process.env['ANTHROPIC_API_KEY'] = saved;
     }

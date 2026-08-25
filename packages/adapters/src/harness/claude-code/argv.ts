@@ -56,10 +56,6 @@ export function buildClaudeArgv(options: ClaudeArgvOptions): string[] {
   const { constraints } = options.card;
 
   return [
-    // Blocks the checked-out repository's own hooks and .mcp.json from executing.
-    // Without it a -p run executes them with no trust prompt — a supply-chain hazard
-    // for a tool whose whole job is checking out untrusted repositories.
-    '--bare',
     '-p',
     buildPrompt(options.taskCardPath),
 
@@ -76,9 +72,21 @@ export function buildClaudeArgv(options: ClaudeArgvOptions): string[] {
     '--allowedTools',
     ...(options.allowedTools ?? DEFAULT_ALLOWED_TOOLS),
 
-    // MANDATORY. `--setting-sources ""` alone does NOT disable MCP: a run was
-    // observed loading five of the developer's authenticated servers, which is a
-    // direct prompt-injection-to-exfiltration path.
+    // Together these are the isolation, and each covers something the other does not.
+    //
+    // `--setting-sources ""` stops the checked-out repository's own hooks from
+    // running — verified: a SessionStart hook in a repo's .claude/settings.json does
+    // not fire with this set.
+    //
+    // `--strict-mcp-config` with an empty server map is MANDATORY on top of it:
+    // `--setting-sources ""` alone does NOT disable MCP, and a run was observed
+    // loading five of the developer's authenticated servers — a direct
+    // prompt-injection-to-exfiltration path.
+    //
+    // Deliberately NOT `--bare`. It would add nothing here (both hazards are already
+    // covered) while forcing ANTHROPIC_API_KEY, because --bare never reads an
+    // interactive login. That would break the product's central promise: reuse the
+    // Claude Code installation and authentication the developer already has.
     '--strict-mcp-config',
     '--mcp-config',
     '{"mcpServers":{}}',

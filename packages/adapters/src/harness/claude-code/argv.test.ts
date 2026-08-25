@@ -25,10 +25,20 @@ function valueAfter(args: string[], flag: string): string | undefined {
 }
 
 describe('claude argv contract', () => {
+  it('does NOT pass --bare, which would break reuse of an existing login', () => {
+    // --bare adds nothing here (hooks and MCP are already blocked) while forcing
+    // ANTHROPIC_API_KEY, because it never reads an interactive login. Requiring a
+    // separate key would break the promise to reuse the installation and
+    // authentication a developer already has.
+    expect(argv()).not.toContain('--bare');
+  });
+
   it('isolates the run from repository and user configuration', () => {
     const args = argv();
     // Each of these is a security control, not a preference.
-    expect(args).toContain('--bare');                    // no repo hooks or .mcp.json
+    // `--setting-sources ""` stops the repository's own hooks from running, and
+    // `--strict-mcp-config` stops its MCP servers loading — verified separately,
+    // because neither covers the other.
     expect(args).toContain('--strict-mcp-config');
     expect(valueAfter(args, '--mcp-config')).toBe('{"mcpServers":{}}');
     expect(valueAfter(args, '--setting-sources')).toBe('');

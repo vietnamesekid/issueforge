@@ -189,18 +189,17 @@ describe('ClaudeCodeAdapter', { timeout: 20_000 }, () => {
     expect(await new ClaudeCodeAdapter().detect()).toEqual({ installed: false });
   });
 
-  it('detect() reports unauthenticated when no API key is present', async () => {
-    // --bare never reads OAuth, so a missing key is the common failure and must be
-    // named plainly rather than discovered when a run stalls.
-    // Must print something: detect() reads --version, and an empty stdout is
-    // indistinguishable from a CLI that is not installed.
+  it('detect() accepts an interactive login as authentication', async () => {
+    // The product reuses the Claude Code login a developer already has; an API key is
+    // one route, not the only one. The fake CLI exits 0 for `auth status`, standing in
+    // for a signed-in machine.
     fakeClaude(['2.1.215 (Claude Code)']);
     const saved = process.env['ANTHROPIC_API_KEY'];
     delete process.env['ANTHROPIC_API_KEY'];
     try {
       const caps = await new ClaudeCodeAdapter().detect();
       expect(caps.installed).toBe(true);
-      expect(caps.authenticated).toBe(false);
+      expect(caps.authenticated).toBe(true);
     } finally {
       if (saved !== undefined) process.env['ANTHROPIC_API_KEY'] = saved;
     }

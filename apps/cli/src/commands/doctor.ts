@@ -37,7 +37,7 @@ export function runDoctor(): CheckResult[] {
       'Claude Code',
       'Install Claude Code: https://code.claude.com/docs',
     ),
-    checkApiKey(),
+    checkHarnessAuth(),
     checkHome(),
   ];
 }
@@ -108,26 +108,30 @@ function checkGhAuth(): CheckResult {
 }
 
 /**
- * The check that exists because of a specific, easily-missed failure.
+ * Whether the harness can authenticate at all.
  *
- * IssueForge runs the harness with `--bare` so a checked-out repository's hooks and
- * MCP servers cannot execute. Under `--bare`, authentication is strictly
- * ANTHROPIC_API_KEY — OAuth and the keychain are never read. A logged-in developer
- * therefore still needs the key, and without this check they would discover that when
- * a run stalls rather than when they run setup.
+ * An interactive login is enough — reusing the Claude Code installation and
+ * authentication a developer already has is the point of the product, not a fallback.
+ * ANTHROPIC_API_KEY is reported when present because it is what a CI or headless
+ * setup will use, but its absence is not a problem for someone already logged in.
  */
-function checkApiKey(): CheckResult {
-  // Only whether one is present; never its value.
-  return process.env['ANTHROPIC_API_KEY'] !== undefined
-    ? { name: 'api key', level: 'ok', detail: 'ANTHROPIC_API_KEY is set' }
-    : {
-        name: 'api key',
-        level: 'blocked',
-        detail: 'ANTHROPIC_API_KEY is not set',
-        fix:
-          'Export ANTHROPIC_API_KEY. IssueForge runs the harness with --bare so an untrusted ' +
-          'repository cannot execute its own hooks, and --bare never reads an interactive login.',
-      };
+function checkHarnessAuth(): CheckResult {
+  if (process.env['ANTHROPIC_API_KEY'] !== undefined) {
+    // Only whether one is present; never its value.
+    return { name: 'harness auth', level: 'ok', detail: 'ANTHROPIC_API_KEY is set' };
+  }
+
+  const status = tryRun('claude', ['auth', 'status']);
+  if (status !== null) {
+    return { name: 'harness auth', level: 'ok', detail: 'signed in to Claude Code' };
+  }
+
+  return {
+    name: 'harness auth',
+    level: 'blocked',
+    detail: 'Claude Code is not authenticated',
+    fix: 'Run `claude` once and sign in, or export ANTHROPIC_API_KEY for a headless setup.',
+  };
 }
 
 function checkHome(): CheckResult {

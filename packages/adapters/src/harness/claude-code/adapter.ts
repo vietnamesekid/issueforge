@@ -23,10 +23,9 @@ export class ClaudeCodeAdapter implements HarnessAdapter {
   /**
    * Report usability without spending tokens and without hanging.
    *
-   * `--bare` is required for isolation, and under it authentication is strictly
-   * ANTHROPIC_API_KEY — OAuth and the keychain are never read. A missing key is the
-   * common failure, so it is reported here as a plain "not authenticated" rather than
-   * discovered when a run stalls.
+   * Authentication is either an existing interactive login or ANTHROPIC_API_KEY;
+   * reusing the login a developer already has is the point, so a missing key is not
+   * by itself a failure.
    */
   async detect(): Promise<HarnessCapabilities> {
     const version = await this.#version();
@@ -35,7 +34,8 @@ export class ClaudeCodeAdapter implements HarnessAdapter {
     return {
       installed: true,
       version,
-      authenticated: process.env['ANTHROPIC_API_KEY'] !== undefined,
+      authenticated:
+        process.env['ANTHROPIC_API_KEY'] !== undefined || (await this.#signedIn()),
     };
   }
 
@@ -53,8 +53,10 @@ export class ClaudeCodeAdapter implements HarnessAdapter {
     const child = spawnSupervised(CLI, argv, {
       cwd: request.cwd,
       timeoutMs: request.taskCard.constraints.timeoutMs,
-      // --bare reads no OAuth, so the key must be passed deliberately. Naming it here
-      // is what makes it an allowed exception to the environment allowlist.
+      // Forwarded when present, for a headless or CI setup. It is optional: without
+      // it the harness uses the developer's existing interactive login, which is the
+      // authentication this product is built to reuse. Naming it explicitly is what
+      // makes it an allowed exception to the environment allowlist.
       env: {
         ...(process.env['ANTHROPIC_API_KEY'] !== undefined
           ? { extra: { ANTHROPIC_API_KEY: process.env['ANTHROPIC_API_KEY'] } }
@@ -64,6 +66,16 @@ export class ClaudeCodeAdapter implements HarnessAdapter {
     });
 
     return new ClaudeCodeRun(child);
+  }
+
+  /** Whether an interactive login exists. `claude auth status` exits non-zero if not. */
+  async #signedIn(): Promise<boolean> {
+    try {
+      await execFileAsync(CLI, ['auth', 'status'], { timeout: DETECT_TIMEOUT_MS });
+      return true;
+    } catch {
+      return false;
+    }
   }
 
   async #version(): Promise<string | null> {
