@@ -6,6 +6,15 @@ import { createContext } from './context.js';
 import { NotOurLabelError, parseEventFile } from './commands/handle-github-event.js';
 import { runReproduce } from './commands/run-reproduce.js';
 import { collectStatus, renderStatusTable } from './commands/status.js';
+import { hasBlockingProblem, renderDoctor, runDoctor } from './commands/doctor.js';
+import { renderInit, runInit } from './commands/init.js';
+import {
+  listenerDeletionTargets,
+  listenerStatus,
+  renderListenerInstructions,
+  uninstallListener,
+} from './commands/listener.js';
+import { executeClean, planClean, renderCleanPlan } from './commands/clean.js';
 
 /**
  * Composition root and argv parsing.
@@ -128,6 +137,102 @@ export function buildProgram(): Command {
         report(result, options.json === true);
       },
     );
+
+  program
+    .command('init')
+    .option('--force', 'replace files that already exist', false)
+    .option('--json', 'emit machine-readable output')
+    .description('Generate the workflow and config a repository needs')
+    .action((options: { force: boolean; json?: boolean }) => {
+      const results = runInit(process.cwd(), options.force);
+      if (options.json === true) emit(results);
+      else process.stdout.write(`${renderInit(results)}\n`);
+    });
+
+  program
+    .command('doctor')
+    .option('--json', 'emit machine-readable output')
+    .description('Check whether this machine can run IssueForge')
+    .action((options: { json?: boolean }) => {
+      const results = runDoctor();
+
+      if (options.json === true) emit(results);
+      else process.stdout.write(`${renderDoctor(results)}\n`);
+
+      // Non-zero so a setup script or CI step can branch on it.
+      if (hasBlockingProblem(results)) process.exitCode = EXIT.failed;
+    });
+
+  const listener = program.command('listener').description('Manage the GitHub event listener');
+
+  listener
+    .command('install')
+    .requiredOption('--repo <slug>', 'owner/repo to register against')
+    .description('Show how to install and register the self-hosted runner')
+    .action((options: { repo: string }) => {
+      process.stdout.write(`${renderListenerInstructions(options.repo)}\n`);
+    });
+
+  listener
+    .command('status')
+    .option('--json', 'emit machine-readable output')
+    .description('Report whether the listener is installed and running')
+    .action((options: { json?: boolean }) => {
+      const state = listenerStatus();
+      if (options.json === true) {
+        emit(state);
+        return;
+      }
+      process.stdout.write(
+        [
+          `installed  ${state.installed ? 'yes' : 'no'}`,
+          `registered ${state.configured ? 'yes' : 'no'}`,
+          `running    ${state.running ? 'yes' : 'no'}`,
+          `path       ${state.path}`,
+        ].join('\n') + '\n',
+      );
+    });
+
+  listener
+    .command('uninstall')
+    .option('--repo <slug>', 'unregister from this repository first')
+    .option('--yes', 'actually delete', false)
+    .description('Remove the listener')
+    .action((options: { repo?: string; yes: boolean }) => {
+      const targets = listenerDeletionTargets();
+      if (targets.length === 0) {
+        process.stdout.write('Nothing to remove.\n');
+        return;
+      }
+
+      // Say exactly what goes before anything goes.
+      process.stdout.write(`Would delete:\n${targets.join('\n')}\n`);
+      if (!options.yes) {
+        process.stdout.write('\nRe-run with --yes to delete.\n');
+        return;
+      }
+
+      for (const line of uninstallListener(options.repo)) process.stdout.write(`${line}\n`);
+    });
+
+  program
+    .command('clean')
+    .option('--older-than <days>', 'remove runs older than this', Number, 14)
+    .option('--yes', 'actually delete', false)
+    .option('--json', 'emit machine-readable output')
+    .description('Remove old runs, transcripts and workspaces')
+    .action((options: { olderThan: number; yes: boolean; json?: boolean }) => {
+      const context = createContext();
+      const targets = planClean(context, {
+        olderThanDays: options.olderThan,
+        dryRun: !options.yes,
+      });
+
+      if (options.yes) executeClean(context, targets);
+
+      if (options.json === true) emit({ removed: options.yes, targets });
+      else process.stdout.write(`${renderCleanPlan(targets, !options.yes)}\n`);
+    });
 
   program
     .command('status')

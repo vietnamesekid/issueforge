@@ -1,5 +1,5 @@
 {
-  "name": "@issueforge/cli",
+  "name": "issueforge",
   "version": "0.0.0",
   "type": "module",
   "bin": {
@@ -17,12 +17,16 @@
     "dev": "node src/main.ts"
   },
   "dependencies": {
-    "@issueforge/adapters": "workspace:*",
-    "@issueforge/contracts": "workspace:*",
-    "@issueforge/core": "workspace:*",
-    "commander": "^12.1.0"
+    "commander": "^12.1.0",
+    "pino": "^10.3.1",
+    "execa": "^10.0.1",
+    "zod": "^4.4.3"
   },
   "devDependencies": {
-    "@types/node": "catalog:"
-  }
+    "@types/node": "catalog:",
+    "@issueforge/adapters": "workspace:*",
+    "@issueforge/contracts": "workspace:*",
+    "@issueforge/core": "workspace:*"
+  },
+  "description": "Local-first GitHub IssueOps supervisor for coding-agent harnesses"
 }

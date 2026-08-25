@@ -8,7 +8,7 @@
   },
   "packageManager": "pnpm@10.33.4",
   "scripts": {
-    "build": "tsc --build && pnpm --filter @issueforge/cli exec tsup",
+    "build": "tsc --build && pnpm --filter issueforge exec tsup",
     "typecheck": "tsc --build",
     "test": "pnpm build && vitest run",
     "test:watch": "vitest",
