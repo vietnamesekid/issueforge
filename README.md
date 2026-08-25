@@ -209,8 +209,14 @@ container isolation stays optional rather than becoming a v0.1 requirement. The 
 supervisor is killed outright, its own run record can never be updated, so orphans are detected by
 checking whether the *owning process* is still alive rather than by trusting recorded state.
 
-Remaining: event delivery, worktree/clone isolation, prompt-injection resistance, and — most
-importantly — proving that a *deliberately lying* agent claim is actually rejected.
+**The verification gate — done, passed.** This is the one that mattered. Against a real coding agent,
+the identical "I reproduced it" claim was accepted when the bug was present and rejected when it was
+not. The sharpest lesson: *"the command failed" is weak evidence.* A reproduction script containing
+nothing but `exit 1` initially slipped through. The fix is a **differential check** — a genuine
+reproduction must fail on the buggy code **and pass once the bug is removed** — which also catches a
+failure that is real but unrelated to the reported defect.
+
+Remaining: event delivery, worktree/clone isolation, and prompt-injection resistance.
 
 ### v0.1 — Local Reproduce Gate
 
