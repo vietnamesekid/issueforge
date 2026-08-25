@@ -14,3 +14,5 @@ export type {
   TaskAttemptOutcome,
 } from './ports/run-store.js';
 export { isTerminal, mayHoldProcesses } from './domain/run-status.js';
+export { HarnessContractError } from './ports/harness.js';
+export type { HarnessAdapter, HarnessRun, HarnessRunRequest } from './ports/harness.js';

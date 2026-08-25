@@ -1,0 +1,77 @@
+import type {
+  HarnessCapabilities,
+  HarnessEvent,
+  HarnessRunOutcome,
+  TaskCard,
+} from '@issueforge/contracts';
+
+/**
+ * The port every coding harness is driven through.
+ *
+ * IssueForge orchestrates the outer workflow; the harness owns its own planning, tool
+ * use and editing loop. This interface is deliberately the whole of that boundary —
+ * if it ever grows a method about *how* to reason, IssueForge has started becoming a
+ * coding agent, which is the one outcome the design exists to avoid.
+ *
+ * Adapters translate; they do not decide. Whether a run succeeded is settled by
+ * replaying its evidence, not by anything a harness reports here.
+ */
+export interface HarnessAdapter {
+  /** Stable identifier, used in logs and to select an adapter from config. */
+  readonly name: 'claude-code' | 'codex';
+
+  /**
+   * Whether this harness is usable right now.
+   *
+   * Must answer without spending tokens and without hanging: a missing credential is
+   * the common failure, and `doctor` needs to report it as a blocking error rather
+   * than letting a run stall.
+   */
+  detect(): Promise<HarnessCapabilities>;
+
+  /**
+   * Run one task to completion.
+   *
+   * Yields normalised events as they arrive, so a caller can persist a transcript
+   * while the run is still going — a run killed mid-flight must leave evidence of
+   * how far it got.
+   */
+  run(request: HarnessRunRequest): HarnessRun;
+}
+
+export interface HarnessRunRequest {
+  /** Workspace root. The harness is confined here; nothing outside is in scope. */
+  cwd: string;
+  /** Written to disk and referenced by path — never interpolated into a prompt. */
+  taskCard: TaskCard;
+  /** Path the task card was written to, relative to `cwd`. */
+  taskCardPath: string;
+  /** JSON Schema the harness must satisfy in its structured result. */
+  resultSchema: unknown;
+  /** Correlates the harness session with the run for later diagnosis. */
+  sessionId: string;
+  signal?: AbortSignal;
+}
+
+export interface HarnessRun {
+  /** Process group, to persist before awaiting so an orphan stays reapable. */
+  readonly pgid: number;
+  events(): AsyncIterable<HarnessEvent>;
+  /** Resolves once the process has exited and the stream is drained. */
+  outcome(): Promise<HarnessRunOutcome>;
+  cancel(): void;
+}
+
+/**
+ * The harness produced output that cannot be trusted or used.
+ *
+ * Distinct from a failed run: this means the *contract* was broken — the sandbox was
+ * not what was requested, or the result did not match its schema — so the output must
+ * not be interpreted at all.
+ */
+export class HarnessContractError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'HarnessContractError';
+  }
+}
