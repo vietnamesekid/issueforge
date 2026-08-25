@@ -216,7 +216,13 @@ nothing but `exit 1` initially slipped through. The fix is a **differential chec
 reproduction must fail on the buggy code **and pass once the bug is removed** — which also catches a
 failure that is real but unrelated to the reported defect.
 
-Remaining: event delivery, worktree/clone isolation, and prompt-injection resistance.
+**Event delivery — done, passed.** A label applied on GitHub reached a local process in about ten
+seconds, with no inbound port, no tunnel and no polling. The same run also reproduced a real
+work-destroying bug in the obvious workflow configuration: under GitHub's default concurrency queue,
+labelling three issues in quick succession **silently cancels the middle one**, with no error surfaced
+anywhere. Fixed by an explicit queue setting — and worth knowing about before it eats someone's issue.
+
+Remaining: worktree/clone isolation, and prompt-injection resistance.
 
 ### v0.1 — Local Reproduce Gate
 
