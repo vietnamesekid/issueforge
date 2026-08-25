@@ -1,0 +1,12 @@
+node_modules/
+dist/
+*.tsbuildinfo
+.DS_Store
+coverage/
+
+# Local working documents — design notes, validation evidence and planning.
+# Kept on disk for humans and agents to read; deliberately not committed.
+docs/
+project_brief.md
+PROJECT_STATUS.md
+IMPLEMENTATION_PLAN.md

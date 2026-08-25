@@ -1,0 +1,25 @@
+{
+  "name": "@issueforge/cli",
+  "version": "0.0.0",
+  "type": "module",
+  "bin": {
+    "issueforge": "./dist/main.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "engines": {
+    "node": ">=22.13.0"
+  },
+  "scripts": {
+    "build": "tsup",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "dev": "node src/main.ts"
+  },
+  "dependencies": {
+    "@issueforge/adapters": "workspace:*",
+    "@issueforge/contracts": "workspace:*",
+    "@issueforge/core": "workspace:*",
+    "commander": "^12.1.0"
+  }
+}

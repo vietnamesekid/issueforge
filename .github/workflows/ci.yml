@@ -1,0 +1,41 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # 24 is Active LTS and the primary target; 22.13 is the supported floor
+        # (the version where node:sqlite stops needing a flag).
+        node: ['24', '22.13']
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      # Build first: packages consume each other's emitted .d.ts files.
+      - run: pnpm build
+
+      - run: pnpm typecheck
+
+      - run: pnpm lint
+
+      # Includes the import-boundary check, which fails CI on a dependency-direction
+      # violation (e.g. core importing an adapter or node:fs).
+      - run: pnpm test
+
+      - name: CLI smoke test
+        run: node apps/cli/dist/main.js --help
