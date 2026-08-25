@@ -1,8 +1,8 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { execFileSync } from 'node:child_process';
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import type {
   HarnessCapabilities,
   HarnessEvent,
@@ -66,7 +66,9 @@ class ScriptedHarness implements HarnessAdapter {
   run(request: { cwd: string }): HarnessRun {
     // Write what the "agent" produced, exactly where a real one would.
     for (const [relative, contents] of Object.entries(this.files)) {
-      writeFileSync(join(request.cwd, relative), contents);
+      const path = join(request.cwd, relative);
+      mkdirSync(dirname(path), { recursive: true });
+      writeFileSync(path, contents);
     }
 
     const events: HarnessEvent[] = [
@@ -284,10 +286,12 @@ describe('v0.1 vertical slice', { timeout: 120_000 }, () => {
   });
 
   it('REJECTS a reproduction script that only exits non-zero', async () => {
-    harness.files = { 'repro.sh': TRIVIAL_REPRO };
+    // Inside the allowed paths, so the write boundary lets it through and the
+    // validator is the one that judges it — which is the layer that should.
+    harness.files = { 'test/repro.sh': TRIVIAL_REPRO };
     harness.claim = {
       verdict: 'reproduced',
-      reproCommand: ['sh', './repro.sh'],
+      reproCommand: ['sh', 'test/repro.sh'],
       summary: 'lazy repro',
     };
 
@@ -295,6 +299,48 @@ describe('v0.1 vertical slice', { timeout: 120_000 }, () => {
 
     expect(verdict).toBe('cannot-reproduce');
     expect(why).toMatch(/does nothing but exit/);
+  });
+
+  it('BLOCKS a run that wrote outside its permitted paths', async () => {
+    // A reproduce task adds evidence; it does not edit source. A run that did is
+    // reported as `blocked`, never as a verdict — it misbehaved, which says nothing
+    // about the bug, and calling it `cannot-reproduce` would be false.
+    harness.files = {
+      'test/repro.test.js': GENUINE_REPRO,
+      'src/parse.js': FIXED_SOURCE, // "helpfully" fixed the bug it was asked to reproduce
+    };
+    harness.claim = {
+      verdict: 'reproduced',
+      reproCommand: ['node', '--test', 'test/repro.test.js'],
+      testFile: 'test/repro.test.js',
+      summary: 'also fixed it',
+    };
+
+    const { runId, verdict, why } = await reproduceAndValidate();
+
+    expect(verdict).toBe('blocked');
+    expect(why).toMatch(/outside its permitted paths/);
+    expect(why).toContain('src/parse.js');
+    expect(store.getRun(runId)?.status).toBe('blocked');
+  });
+
+  it('BLOCKS a run that touched .github, whatever else it did', async () => {
+    // This is how a run would rewrite the workflow that runs it.
+    harness.files = {
+      'test/repro.test.js': GENUINE_REPRO,
+      '.github/workflows/ci.yml': 'name: pwned\n',
+    };
+    harness.claim = {
+      verdict: 'reproduced',
+      reproCommand: ['node', '--test', 'test/repro.test.js'],
+      testFile: 'test/repro.test.js',
+      summary: 's',
+    };
+
+    const { verdict, why } = await reproduceAndValidate();
+
+    expect(verdict).toBe('blocked');
+    expect(why).toContain('.github/workflows/ci.yml');
   });
 
   it('reports needs-info when the harness returns no claim at all', async () => {

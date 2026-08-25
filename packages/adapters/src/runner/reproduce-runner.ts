@@ -21,6 +21,7 @@ import {
 } from '@issueforge/core';
 import { JsonlWriter, type Logger } from '../logger/index.js';
 import { reapOrphans } from '../process/index.js';
+import { auditWorkspace, WriteBoundaryError } from '../policy/index.js';
 import { runPath } from '../workspace/index.js';
 
 /**
@@ -194,6 +195,29 @@ export class ReproduceRunner {
       events.flush();
 
       const outcome = await run.outcome();
+
+      // Audit before interpreting anything the harness produced. A run that wrote
+      // outside its permitted paths has misbehaved, and its output must not be read
+      // as a finding about the bug — that would report a policy failure as a verdict.
+      const audit = auditWorkspace(workspace.path, {
+        // The task card is IssueForge's own file, written into the workspace so the
+        // harness can read it. Auditing our own artefact against the harness's
+        // boundary would fail every run for something the harness never did.
+        allowedPaths: [...card.constraints.allowedPaths, taskCardPath],
+        forbiddenPaths: card.constraints.forbiddenPaths,
+      });
+
+      if (audit.violations.length > 0) {
+        const violation = new WriteBoundaryError(audit.violations);
+        logger.warn({ runId, violations: audit.violations }, 'run violated its write boundary');
+        return this.#finish(
+          runId,
+          attempt,
+          classifyFailure({ kind: 'contract', message: violation.message }),
+          undefined,
+        );
+      }
+
       return this.#finish(runId, attempt, classifyAttempt(outcome), outcome);
     } catch (error) {
       events.flush();

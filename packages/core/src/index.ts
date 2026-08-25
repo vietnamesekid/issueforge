@@ -18,6 +18,8 @@ export { classifyAttempt, classifyFailure } from './domain/reproduce-outcome.js'
 export type { AttemptClassification, AttemptFailure } from './domain/reproduce-outcome.js';
 export { buildReproduceCard } from './domain/task-card.js';
 export { validateReproduction } from './domain/evidence-validator.js';
+export { checkWriteBoundary, describeViolations, ALWAYS_FORBIDDEN } from './domain/write-boundary.js';
+export type { WriteBoundary, BoundaryViolation } from './domain/write-boundary.js';
 export type { ValidationRequest } from './domain/evidence-validator.js';
 export type { Replayer, ReplayOptions, DefectToggle } from './ports/replay.js';
 export type { GitHubWriter } from './ports/github.js';
