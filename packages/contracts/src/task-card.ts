@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { Argv, RepoSlug, Sha, TaskKind } from './common.js';
+import { RepoSlug, Sha, TaskKind } from './common.js';
 
 /**
  * The task card is what a harness actually receives — a file, never a giant prompt
@@ -61,9 +61,6 @@ export const TaskCard = z.object({
   /** Artifacts produced by an earlier stage, e.g. the reproduction handed to the fixer. */
   priorArtifacts: z.array(z.string().min(1)).default([]),
 });
-
-/** A command the harness claims demonstrates the bug. Always argv — see `Argv`. */
-export const ReproCommand = Argv;
 
 export type IssueRef = z.infer<typeof IssueRef>;
 export type TaskConstraints = z.infer<typeof TaskConstraints>;

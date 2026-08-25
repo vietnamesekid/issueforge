@@ -77,6 +77,17 @@ describe('redaction', () => {
     expect(containsSecret(text)).toBe(false);
   });
 
+  it('turns values JSON cannot represent into null instead of dropping them', () => {
+    // JSON.stringify silently omits undefined/function/symbol properties. In a log
+    // record that reads as "the field was never set" rather than "the value was not
+    // loggable", so they become null and stay visible.
+    const out = redactValue({ a: undefined, b: () => 1, c: Symbol('s'), d: 1 }) as Record<
+      string,
+      unknown
+    >;
+    expect(out).toEqual({ a: null, b: null, c: null, d: 1 });
+  });
+
   it('walks nested structures and preserves shape', () => {
     const out = redactValue({
       runId: 'run_abc123',
@@ -85,9 +96,12 @@ describe('redaction', () => {
       count: 3,
       nested: null,
     });
-    expect(out.runId).toBe('run_abc123');           // keys and safe values intact
-    expect(out.count).toBe(3);                       // non-strings untouched
-    expect(out.nested).toBe(null);
+    // Narrow once: redactValue returns JsonValue, because it builds a new value
+    // rather than echoing the caller's type.
+    const record = out as Record<string, unknown>;
+    expect(record['runId']).toBe('run_abc123');      // keys and safe values intact
+    expect(record['count']).toBe(3);                 // non-strings untouched
+    expect(record['nested']).toBe(null);
     expect(JSON.stringify(out)).not.toContain('AKIAIOSFODNN7EXAMPLE');
     expect(JSON.stringify(out)).not.toContain('ghp_abcdefghij');
   });

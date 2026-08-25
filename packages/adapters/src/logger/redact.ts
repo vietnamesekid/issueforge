@@ -68,20 +68,31 @@ export function containsSecret(input: string): boolean {
   return redact(input) !== input;
 }
 
+/** Anything that survives `JSON.stringify` — what a log record or JSONL event is. */
+export type JsonValue = string | number | boolean | null | JsonValue[] | { [key: string]: JsonValue };
+
 /**
  * Redact recursively through a JSON-serialisable value.
- * Object KEYS are preserved; only string values are rewritten, so a redacted record
- * stays the same shape and remains machine-readable.
+ *
+ * Object KEYS are preserved and only string values are rewritten, so a redacted
+ * record keeps its shape and stays machine-readable.
+ *
+ * Takes `unknown` and returns `JsonValue`. A generic `<T>(value: T) => T` would claim
+ * the result has the caller's exact type, which is false — this builds a new value —
+ * and buying that false claim costs a cast at every branch. Callers serialise the
+ * result, so `JsonValue` is both honest and what they need.
  */
-export function redactValue<T>(value: T): T {
-  if (typeof value === 'string') return redact(value) as unknown as T;
-  if (Array.isArray(value)) return value.map((v) => redactValue(v)) as unknown as T;
+export function redactValue(value: unknown): JsonValue {
+  if (typeof value === 'string') return redact(value);
+  if (Array.isArray(value)) return value.map(redactValue);
   if (value !== null && typeof value === 'object') {
-    const out: Record<string, unknown> = {};
-    for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
-      out[k] = redactValue(v);
-    }
-    return out as unknown as T;
+    return Object.fromEntries(
+      Object.entries(value as Record<string, unknown>).map(([key, v]) => [key, redactValue(v)]),
+    );
   }
-  return value;
+  // Numbers, booleans and null pass through. Anything else (undefined, a function,
+  // a symbol) is not representable in a log record, and JSON.stringify would drop it
+  // anyway — so it becomes null rather than silently vanishing mid-object.
+  if (typeof value === 'number' || typeof value === 'boolean' || value === null) return value;
+  return null;
 }
