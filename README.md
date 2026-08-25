@@ -201,13 +201,15 @@ issueforge uninstall
 
 ### Phase 0 — De-risking spikes *(current)*
 
-Five assumptions are being proven before implementation starts, because a negative result changes the
-architecture rather than the code. The riskiest is process lifecycle: an agent that runs `npm test &`
-can leave orphaned processes holding worktree locks, and a process-group kill alone does **not**
-reliably reap them. If that cannot be solved in-process, container isolation becomes mandatory in
-v0.1 rather than optional in v0.2.
+Five assumptions are being proven before implementation starts, because a negative result here changes
+the architecture rather than the code.
 
-The others cover event delivery, worktree/clone isolation, prompt-injection resistance, and — most
+**Process lifecycle — done, passed.** Reliable cleanup of a harness process tree works in-process, so
+container isolation stays optional rather than becoming a v0.1 requirement. The subtle part: when the
+supervisor is killed outright, its own run record can never be updated, so orphans are detected by
+checking whether the *owning process* is still alive rather than by trusting recorded state.
+
+Remaining: event delivery, worktree/clone isolation, prompt-injection resistance, and — most
 importantly — proving that a *deliberately lying* agent claim is actually rejected.
 
 ### v0.1 — Local Reproduce Gate
