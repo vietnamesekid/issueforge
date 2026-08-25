@@ -3,7 +3,11 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { RunState } from '@issueforge/contracts';
+import { spawn } from 'node:child_process';
 import { SqliteRunStore } from './sqlite-run-store.js';
+
+/** Built entry point, used by the cross-process test below. */
+const distEntry = new URL('../../dist/index.js', import.meta.url).pathname;
 import { SCHEMA_VERSION } from './migrations.js';
 
 const SHA = 'a'.repeat(40);
@@ -105,6 +109,42 @@ describe('durability — the database is the source of truth, not the process', 
     expect(run?.status).toBe('interrupted');
     expect(run?.detail).toBe('SIGINT');
     reopened.close();
+  });
+
+  it('two real PROCESSES can cold-start against the same new database', async () => {
+    // The single-process test below passes even when concurrent startup is broken,
+    // because both connections live in one process. Converting a fresh database to
+    // WAL takes an exclusive lock, and before busy_timeout was moved ahead of that
+    // conversion this failed in 6 of 8 attempts with "database is locked".
+    //
+    // The children must run CONCURRENTLY: spawnSync would start them one after the
+    // other, and a sequential pair never races, so such a test passes against the
+    // broken ordering and proves nothing.
+    const racePath = join(dir, 'race', 'state.db');
+    const script = `
+      const { SqliteRunStore } = await import(${JSON.stringify(distEntry)});
+      const s = new SqliteRunStore(${JSON.stringify(racePath)});
+      s.migrate();
+      s.close();
+      console.log('OK');
+    `;
+
+    const run = (): Promise<{ code: number | null; stderr: string }> =>
+      new Promise((resolve) => {
+        const child = spawn(process.execPath, ['--input-type=module', '-e', script], {
+          stdio: ['ignore', 'ignore', 'pipe'],
+        });
+        let stderr = '';
+        child.stderr.on('data', (d: Buffer) => { stderr += d.toString(); });
+        child.on('exit', (code) => resolve({ code, stderr }));
+      });
+
+    const results = await Promise.all([run(), run()]);
+
+    for (const r of results) {
+      expect(r.stderr).not.toMatch(/database is locked/i);
+      expect(r.code).toBe(0);
+    }
   });
 
   it('two connections read and write concurrently without SQLITE_BUSY', () => {

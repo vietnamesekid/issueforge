@@ -31,6 +31,35 @@ describe('redaction', () => {
     }
   });
 
+  it('is case-insensitive for assigned secrets', () => {
+    // .env files conventionally use lowercase. An agent echoing `token=...` from a
+    // config file leaks exactly as badly as `TOKEN=...`, so casing must not matter.
+    for (const input of [
+      'TOKEN=abcdef123456',
+      'token=abcdef123456',
+      'api_key=abcdef123456',
+      'Token: abcdef123456',
+      'password=hunter2000',
+    ]) {
+      expect(redact(input), input).toContain('[REDACTED]');
+    }
+  });
+
+  it('catches npm, GitLab and JWT shapes', () => {
+    for (const input of [
+      'npm_abcdefghijklmnopqrstuvwxyz',
+      'glpat-abcdefghijklmnop',
+      'eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.abcdefghijk',
+    ]) {
+      expect(redact(input), input).toContain('[REDACTED]');
+    }
+  });
+
+  it('does not false-positive on ordinary prose containing hex', () => {
+    const text = 'reproduced the bug in src/math.js at commit a1b2c3d';
+    expect(redact(text)).toBe(text);
+  });
+
   it('redacts assigned secrets but keeps the key visible for debugging', () => {
     const out = redact('GITHUB_TOKEN=ghp_abcdefghijklmnopqrstuvwxyz01');
     expect(out).toContain('GITHUB_TOKEN=');

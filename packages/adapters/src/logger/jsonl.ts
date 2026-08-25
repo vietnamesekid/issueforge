@@ -52,8 +52,14 @@ export class JsonlWriter {
     writeSync(this.#ensureOpen(), payload);
   }
 
-  /** Flush and force the OS to persist, for the durability points that matter. */
-  flushSync(): void {
+  /**
+   * Flush, then force the OS to persist to disk.
+   *
+   * Named for what it adds over `flush()` — an fsync — because `flush()` is already
+   * synchronous; a `Sync` suffix would imply an async/sync distinction that does not
+   * exist here.
+   */
+  flushDurable(): void {
     this.flush();
     if (this.#fd !== null) fsyncSync(this.#fd);
   }

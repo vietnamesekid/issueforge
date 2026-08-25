@@ -69,15 +69,44 @@ export class SqliteRunStore implements RunStore {
     if (path !== ':memory:') mkdirSync(dirname(path), { recursive: true });
     this.#db = new (loadSqlite().DatabaseSync)(path);
 
-    // WAL: the CLI and the listener service both open this file. WAL lets readers
-    // proceed during a write instead of failing with SQLITE_BUSY.
-    this.#db.exec('PRAGMA journal_mode = WAL');
-    // Wait rather than throw when a writer holds the lock. Writes here are tiny.
+    // busy_timeout MUST come first. Converting a fresh database to WAL takes an
+    // exclusive lock, and with no timeout configured yet a second process racing the
+    // same cold start fails immediately with SQLITE_BUSY ("database is locked").
+    // Observed in 6 of 8 concurrent cold starts before this ordering.
     this.#db.exec('PRAGMA busy_timeout = 5000');
+
+    // WAL lets readers proceed during a write instead of blocking; the CLI and the
+    // listener service both open this file.
+    this.#enableWal();
+
     this.#db.exec('PRAGMA foreign_keys = ON');
     // NORMAL is the documented pairing with WAL: durable against process death,
     // which is the failure mode we actually face, without an fsync per commit.
     this.#db.exec('PRAGMA synchronous = NORMAL');
+  }
+
+  /**
+   * Convert to WAL, tolerating a concurrent converter.
+   *
+   * busy_timeout alone is not sufficient here: SQLite does not always apply it to the
+   * exclusive lock taken during a journal-mode change, so two processes starting
+   * against the same fresh database can still collide. Whoever loses simply retries —
+   * by then the winner has finished and the mode is already WAL, so the retry is a
+   * no-op read.
+   */
+  #enableWal(): void {
+    const deadline = Date.now() + 5_000;
+    for (;;) {
+      try {
+        this.#db.exec('PRAGMA journal_mode = WAL');
+        return;
+      } catch (error) {
+        if (Date.now() >= deadline) throw error;
+        // Busy-wait briefly; this races only on a cold start and resolves in ms.
+        const until = Date.now() + 20;
+        while (Date.now() < until) { /* spin */ }
+      }
+    }
   }
 
   migrate(): void {

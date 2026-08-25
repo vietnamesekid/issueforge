@@ -22,8 +22,17 @@ const PATTERNS: ReadonlyArray<{ name: string; re: RegExp }> = [
   { name: 'slack-token', re: /\bxox[abposr]-[A-Za-z0-9-]{10,}\b/g },
   { name: 'private-key-block', re: /-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\S]*?-----END [A-Z ]*PRIVATE KEY-----/g },
   { name: 'bearer-header', re: /\b[Bb]earer\s+[A-Za-z0-9._-]{20,}\b/g },
-  // KEY=value / SECRET: value in env dumps and config echoes
-  { name: 'assigned-secret', re: /\b([A-Z0-9_]*(?:TOKEN|SECRET|PASSWORD|APIKEY|API_KEY)[A-Z0-9_]*)\s*[:=]\s*("?)([^\s"']{6,})\2/g },
+  // JSON Web Tokens — three base64url segments.
+  { name: 'jwt', re: /\beyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\b/g },
+  { name: 'npm-token', re: /\bnpm_[A-Za-z0-9]{20,}\b/g },
+  { name: 'gitlab-token', re: /\bglpat-[A-Za-z0-9_-]{16,}\b/g },
+  // KEY=value / KEY: value in env dumps and config echoes.
+  // Case-INSENSITIVE: .env files conventionally use lowercase, and an agent echoing
+  // `token=...` from a config file leaks exactly as badly as `TOKEN=...`.
+  {
+    name: 'assigned-secret',
+    re: /\b([A-Za-z0-9_]*(?:token|secret|password|passwd|apikey|api_key|auth)[A-Za-z0-9_]*)\s*[:=]\s*("?)([^\s"']{6,})\2/gi,
+  },
 ];
 
 export const REDACTED = '[REDACTED]';
