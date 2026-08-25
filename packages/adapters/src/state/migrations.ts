@@ -7,7 +7,8 @@
  * justifies.
  *
  * Rules:
- *  - APPEND ONLY. Never edit a shipped migration; a user's database has already run it.
+ *  - APPEND ONLY once released. Nothing is published yet, so v1 is still editable; from the first
+ *    version a user could have run, every change must be a new entry.
  *  - Each entry runs inside one transaction together with the `user_version` bump, so a
  *    crash mid-migration leaves the database at the previous version rather than halfway.
  */
