@@ -45,8 +45,30 @@ permissions:
   pull-requests: write
 
 jobs:
+  # Cancelling is a separate job with NO per-issue concurrency group: sharing the
+  # dispatch group would queue the cancel behind the very run it is meant to stop.
+  #
+  # IMPORTANT: this only works if the runner can execute two jobs at once. A single
+  # runner has one slot, so the cancel job waits for the run it is trying to kill and
+  # achieves nothing. On a single-runner setup, cancel from the machine instead:
+  #
+  #     issueforge cancel --issue <n>
+  #
+  # Register a second runner with the same "issueforge" label to make the label work.
+  cancel:
+    if: github.event.label.name == 'issueforge:cancel'
+    runs-on: [self-hosted, issueforge]
+    timeout-minutes: 5
+    steps:
+      - name: Stop the run
+        run: |
+          export PATH="\${ISSUEFORGE_BIN:-\$HOME/.local/bin}:\$PATH"
+          issueforge handle github-event --event-path "\$GITHUB_EVENT_PATH"
+
   dispatch:
-    if: startsWith(github.event.label.name, 'issueforge:')
+    if: >-
+      startsWith(github.event.label.name, 'issueforge:')
+      && github.event.label.name != 'issueforge:cancel'
     runs-on: [self-hosted, issueforge]
 
     # Set explicitly: the default is undocumented, and a self-hosted job can
@@ -164,6 +186,10 @@ export function renderInit(results: readonly InitResult[]): string {
     '  3. Create the labels:',
     '       sh .issueforge/labels.sh',
     '  4. Label an issue "issueforge:reproduce"',
+    '',
+    'To stop a run already in flight: issueforge cancel --issue <n>',
+    'The "issueforge:cancel" label does the same, but needs a SECOND runner — one',
+    'runner has one slot, so the cancel job would queue behind the run it must stop.',
     '',
     'Use a private repository. A self-hosted runner executes on your machine, and',
     'anyone can write the issue text an agent will read.',

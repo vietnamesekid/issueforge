@@ -280,6 +280,16 @@ export class TaskRunner {
       return this.#finish(runId, attempt, classifyAttempt(outcome), outcome);
     } catch (error) {
       events.flush();
+
+      // A cancel that landed while this run was dying already recorded the truth, and
+      // it is more specific than "the process died". Overwriting it would replace
+      // "cancelled by request" with "needs-info", which reads as a failure the
+      // maintainer did not cause. Observed live: the ledger said `cancelled` while the
+      // workflow log said exit 143.
+      if (store.getRun(runId)?.status === 'cancelled') {
+        return { runId, status: 'cancelled', detail: 'cancelled by request' };
+      }
+
       return this.#finish(runId, attempt, classifyFailure(toFailure(error)), undefined);
     } finally {
       events.close();

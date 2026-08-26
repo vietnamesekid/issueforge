@@ -47,6 +47,8 @@ class FakeHarness implements HarnessAdapter {
   observedCwd: string | undefined;
   observedEnvAllow: readonly string[] | undefined;
   observedCard: TaskCard | undefined;
+  /** Lets a test act on the ledger mid-run, e.g. to simulate a concurrent cancel. */
+  onRun: (() => void) | undefined;
 
   async detect(): Promise<HarnessCapabilities> {
     return { installed: true, version: 'fake', authenticated: true };
@@ -56,6 +58,7 @@ class FakeHarness implements HarnessAdapter {
     this.observedCwd = request.cwd;
     this.observedEnvAllow = request.envAllow;
     this.observedCard = request.taskCard;
+    this.onRun?.();
     const events = this.events;
     const outcome = this.outcome;
     const failure = this.failure;
@@ -297,6 +300,28 @@ describe('TaskRunner', { timeout: 30_000 }, () => {
     await new TaskRunner(deps(), FIX).run({ ...request(), issueNumber: 8 });
 
     expect(harness.observedCard?.priorArtifacts[0]).toContain('current finding');
+  });
+
+  it('does not overwrite a cancellation with the death it caused', async () => {
+    // Cancelling kills the process group, so the run then fails with a signal — and the
+    // runner would classify that as `needs-info`, replacing "cancelled by request" with
+    // something that reads as a failure the maintainer did not cause. Observed live: the
+    // ledger said `cancelled` while the workflow log said exit 143, and only the order
+    // of two writes decided which survived.
+    harness.failure = new HarnessRunError('crashed', 'Command failed with exit code 143');
+    harness.onRun = () => {
+      // The run whose issue is being cancelled. Ownership is persisted just after the
+      // harness starts, so a cancel arriving this early sees the row but not the pgid —
+      // which is exactly the window that matters.
+      for (const run of store.listRuns({ issueNumber: 7, status: 'running' })) {
+        store.updateRun(run.id, { status: 'cancelled', detail: 'cancelled by request' });
+      }
+    };
+
+    const result = await runner.run({ ...request(), issueNumber: 7 });
+
+    expect(result.status).toBe('cancelled');
+    expect(store.getRun(result.runId)?.status).toBe('cancelled');
   });
 
   it('records a TIMEOUT as a timeout, not as a completed attempt', async () => {

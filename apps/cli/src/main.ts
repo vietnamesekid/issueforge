@@ -1,7 +1,7 @@
 import { execFileSync } from 'node:child_process';
 import { Command } from 'commander';
 import type { RunId, RunStatus, Sha } from '@issueforge/contracts';
-import { RepoSlug, Sha as ShaSchema, Verdict } from '@issueforge/contracts';
+import { optionalDefined, RepoSlug, Sha as ShaSchema, Verdict } from '@issueforge/contracts';
 import { reapOrphans, FIX, REPRODUCE, type TaskDefinition } from '@issueforge/adapters';
 import { createContext } from './context.js';
 import { NotOurLabelError, parseEventFile } from './commands/handle-github-event.js';
@@ -16,6 +16,7 @@ import {
   uninstallListener,
 } from './commands/listener.js';
 import { executeClean, planClean, renderCleanPlan } from './commands/clean.js';
+import { cancelRuns, renderCancelled } from './commands/cancel.js';
 
 /**
  * Composition root and argv parsing.
@@ -77,6 +78,15 @@ export function buildProgram(): Command {
           return;
         }
         throw error;
+      }
+
+      if (event.intent === 'cancel') {
+        // A verb on an existing run rather than a task, so it does not go through the
+        // runner at all.
+        const cancelled = cancelRuns(createContext(), { issueNumber: event.issueNumber });
+        if (options.json === true) emit(cancelled);
+        else process.stdout.write(`${renderCancelled(cancelled)}\n`);
+        return;
       }
 
       const task = TASKS[event.intent];
@@ -164,6 +174,19 @@ export function buildProgram(): Command {
         report(result, options.json === true);
       },
     );
+
+  program
+    .command('cancel')
+    .option('--issue <number>', 'restrict to one issue', Number)
+    .option('--json', 'emit machine-readable output')
+    .description('Stop runs that are still in flight')
+    .action((options: { issue?: number; json?: boolean }) => {
+      const context = createContext();
+      const cancelled = cancelRuns(context, optionalDefined('issueNumber', options.issue));
+
+      if (options.json === true) emit(cancelled);
+      else process.stdout.write(`${renderCancelled(cancelled)}\n`);
+    });
 
   program
     .command('init')
