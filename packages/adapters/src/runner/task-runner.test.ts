@@ -10,6 +10,7 @@ import type {
   IssueForgeConfig,
   ProcessOwnership,
   Sha,
+  TaskCard,
 } from '@issueforge/contracts';
 import { IssueForgeConfig as ConfigSchema, repoSlug, runId, sha } from '@issueforge/contracts';
 import {
@@ -21,7 +22,7 @@ import {
 import { SqliteRunStore } from '../state/index.js';
 import { GitWorkspaceManager } from '../workspace/index.js';
 import { createLogger } from '../logger/index.js';
-import { TaskRunner, IssueBusyError } from './task-runner.js';
+import { TaskRunner, IssueBusyError, FIX } from './task-runner.js';
 
 let dir: string;
 let origin: string;
@@ -45,14 +46,16 @@ class FakeHarness implements HarnessAdapter {
   failure: Error | undefined;
   observedCwd: string | undefined;
   observedEnvAllow: readonly string[] | undefined;
+  observedCard: TaskCard | undefined;
 
   async detect(): Promise<HarnessCapabilities> {
     return { installed: true, version: 'fake', authenticated: true };
   }
 
-  run(request: { cwd: string; envAllow?: readonly string[] }): HarnessRun {
+  run(request: { cwd: string; envAllow?: readonly string[]; taskCard: TaskCard }): HarnessRun {
     this.observedCwd = request.cwd;
     this.observedEnvAllow = request.envAllow;
+    this.observedCard = request.taskCard;
     const events = this.events;
     const outcome = this.outcome;
     const failure = this.failure;
@@ -97,15 +100,13 @@ beforeEach(() => {
   store = new SqliteRunStore(join(root, 'state.db'));
   store.migrate();
   harness = new FakeHarness();
-  runner = new TaskRunner({
-    store,
-    workspaces: new GitWorkspaceManager(root),
-    harness,
-    config,
-    logger,
-    root,
-  });
+  runner = new TaskRunner(deps());
 });
+
+/** The same dependency bundle the default runner uses, for tests that need a second. */
+function deps() {
+  return { store, workspaces: new GitWorkspaceManager(root), harness, config, logger, root };
+}
 
 afterEach(() => {
   try { store.close(); } catch { /* already closed */ }
@@ -256,6 +257,46 @@ describe('TaskRunner', { timeout: 30_000 }, () => {
     await runner.run(request());
 
     expect(harness.observedEnvAllow).toEqual(config.env.allow);
+  });
+
+  it('hands the fix task what the reproduce run found', async () => {
+    // Without this the two runs read as unrelated investigations: the fix re-derives
+    // the cause from scratch and can reach a different conclusion about the same bug.
+    store.createRun({
+      id: runId('earlier1'), repo: repoSlug(), issueNumber: 7, task: 'reproduce',
+      status: 'reproduced', baseSha: sha(), harness: 'claude-code',
+      detail: 'the defect is exactly "no = present"', createdAt: 1, updatedAt: 1,
+    });
+
+    const fixRunner = new TaskRunner(deps(), FIX);
+    await fixRunner.run({ ...request(), issueNumber: 7 });
+
+    expect(harness.observedCard?.priorArtifacts[0]).toContain('no = present');
+    expect(harness.observedCard?.priorArtifacts[0]).toContain('reproduced');
+  });
+
+  it('runs a fix with no prior findings — labelling `fix` directly is allowed', async () => {
+    // Requiring a prior reproduce would put IssueForge back to adjudicating a decision
+    // the maintainer already made by applying the label.
+    const fixRunner = new TaskRunner(deps(), FIX);
+    const result = await fixRunner.run({ ...request(), issueNumber: 99 });
+
+    expect(harness.observedCard?.priorArtifacts).toEqual([]);
+    expect(result.status).not.toBe('blocked');
+  });
+
+  it('prefers the most recent prior run when there are several', async () => {
+    for (const [n, detail] of [['old12345', 'stale finding'], ['new12345', 'current finding']] as const) {
+      store.createRun({
+        id: runId(n), repo: repoSlug(), issueNumber: 8, task: 'reproduce',
+        status: 'reproduced', baseSha: sha(), harness: 'claude-code',
+        detail, createdAt: n.startsWith('old') ? 1 : 2, updatedAt: 1,
+      });
+    }
+
+    await new TaskRunner(deps(), FIX).run({ ...request(), issueNumber: 8 });
+
+    expect(harness.observedCard?.priorArtifacts[0]).toContain('current finding');
   });
 
   it('records a TIMEOUT as a timeout, not as a completed attempt', async () => {

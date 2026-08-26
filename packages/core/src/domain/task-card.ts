@@ -30,6 +30,11 @@ export interface TaskCardInput {
    * of adjudicating a decision the maintainer already made.
    */
   priorArtifacts?: readonly string[];
+  /**
+   * Turns this task needs, when the task kind knows better than the default.
+   * A repository's own config still wins.
+   */
+  maxTurns?: number;
   config: Pick<IssueForgeConfig, 'harness' | 'policy'>;
 }
 
@@ -67,7 +72,7 @@ function buildCard(task: 'reproduce' | 'fix', instructions: string, input: TaskC
       // Everything except the paths below. The harness decides where its work goes.
       allowedPaths: ['**'],
       forbiddenPaths: [...new Set([...NEVER_WRITABLE, ...config.policy.forbiddenPaths])],
-      maxTurns: config.harness.maxTurns,
+      maxTurns: input.maxTurns ?? config.harness.maxTurns,
       timeoutMs: config.harness.timeoutMs,
     },
     instructions,
@@ -160,9 +165,9 @@ const FIX_BRIEF = [
   'How you do that is your call — use the tools, skills and project conventions you find',
   'here. Do not modify the paths listed in constraints.forbiddenPaths.',
   '',
-  'If constraints.priorArtifacts is non-empty, an earlier run already investigated this',
-  'issue. Read it first: it may already name the cause, and it may also name a boundary',
-  'case that must keep working.',
+  'If priorArtifacts is non-empty, an earlier run already investigated this issue.',
+  'Read it first: it may already name the cause, and it may also name a boundary case',
+  'that must keep working.',
   '',
   'Before changing anything, make the bug fail in front of you. A fix for a defect you',
   'have not observed is a guess, and a test written after the fact tends to pass for the',

@@ -53,6 +53,17 @@ import { runPath } from '../workspace/index.js';
  */
 export interface TaskDefinition {
   kind: TaskKind;
+  /**
+   * Turns this task needs, when the default is not enough.
+   *
+   * A fix does strictly more than a reproduce — read, change, write a test, run it
+   * before and after, commit, push, open a PR — and a live run proved the point: the
+   * agent finished the fix (`pass 2, fail 0`) and was cut off by `error_max_turns`
+   * before it could open the PR. The work was done and thrown away.
+   *
+   * A repository's own config still overrides this.
+   */
+  maxTurns?: number;
   /** Builds the brief the harness receives. */
   buildCard(input: TaskCardInput): TaskCard;
   /** JSON Schema for the structured summary the harness returns for the ledger. */
@@ -193,6 +204,8 @@ export class TaskRunner {
     store.updateRun(runId, { workdir: workspace.path });
 
     const card = this.#task.buildCard({
+      ...optionalDefined('maxTurns', this.#task.maxTurns),
+      priorArtifacts: findPriorFindings(store, request),
       issue: request.issue,
       repo: request.repo,
       baseSha: request.baseSha,
@@ -420,6 +433,33 @@ const FIX_RESULT_SCHEMA = {
  */
 export const FIX: TaskDefinition = {
   kind: 'fix',
+  // Measured: 30 was not enough. See TaskDefinition.maxTurns.
+  maxTurns: 60,
   buildCard: buildFixCard,
   resultSchema: FIX_RESULT_SCHEMA,
 };
+
+/**
+ * What an earlier task on this issue already established.
+ *
+ * A fix that re-derives the cause from scratch wastes the reproduce run and can reach a
+ * different conclusion about the same bug. Vercel's agent does the same thing in the
+ * other direction — its fix PR opens with "The reproduction confirmed that..." — and
+ * that continuity is what makes the two runs read as one investigation.
+ *
+ * Deliberately not a gate. An empty list is normal: a maintainer may label an issue
+ * `fix` directly, and refusing to run without a prior reproduce would put IssueForge
+ * back to adjudicating a decision the maintainer already made.
+ */
+function findPriorFindings(store: RunStore, request: TaskRequest): string[] {
+  const priors = store
+    .listRuns({ repo: request.repo, issueNumber: request.issueNumber, limit: 20 })
+    .filter((run) => run.task !== 'fix' && run.detail !== undefined && run.detail.length > 0);
+  // `listRuns` already returns newest first (ORDER BY created_at DESC), and a later run
+  // supersedes an earlier one on the same issue.
+
+  const latest = priors[0];
+  if (latest === undefined) return [];
+
+  return [`${latest.task} run ${latest.id} (${latest.status}): ${latest.detail ?? ''}`];
+}
