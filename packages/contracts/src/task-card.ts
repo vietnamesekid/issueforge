@@ -34,7 +34,6 @@ export const TaskConstraints = z.object({
   /** Wall-clock budget enforced by the supervisor, not by the harness. */
   timeoutMs: z.number().int().positive().default(1_800_000),
   /** Cost ceiling. Real runs cost $0.20–$0.47 for a single regression test, so this is not optional. */
-  maxBudgetUsd: z.number().positive().default(2),
   maxTurns: z.number().int().positive().default(30),
 });
 

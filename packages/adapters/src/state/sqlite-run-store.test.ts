@@ -270,14 +270,13 @@ describe('task attempts', () => {
     store.finishAttempt(runId('a1b2c3'), { outcome: 'timeout', exitCode: 143, endedAt: 20 });
 
     store.startAttempt({ runId: runId('a1b2c3'), attempt: 2, harness: 'claude-code', startedAt: 30 });
-    store.finishAttempt(runId('a1b2c3'), { outcome: 'completed', exitCode: 0, costUsd: 0.42, endedAt: 40 });
+    store.finishAttempt(runId('a1b2c3'), { outcome: 'completed', exitCode: 0, endedAt: 40 });
 
     const attempts = store.listAttempts(runId('a1b2c3'));
     expect(attempts.map((a) => a.attempt)).toEqual([1, 2]);
     expect(attempts[0]?.outcome).toBe('timeout');   // first failure still legible
     expect(attempts[0]?.exitCode).toBe(143);
     expect(attempts[1]?.outcome).toBe('completed');
-    expect(attempts[1]?.costUsd).toBe(0.42);
   });
 
   it('finishAttempt closes the latest attempt, not an earlier one', () => {

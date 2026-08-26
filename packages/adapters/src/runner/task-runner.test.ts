@@ -125,7 +125,6 @@ const claimed = (verdict: string): HarnessRunOutcome => ({
   ok: true,
   denials: 0,
   injectionSuspected: false,
-  costUsd: 0.25,
   exitCode: 0,
   result: { verdict, summary: 's', reproCommand: ['npm', 'test'], testFile: 't.js' },
 } as HarnessRunOutcome);
@@ -194,7 +193,6 @@ describe('TaskRunner', { timeout: 30_000 }, () => {
     expect(attempts).toHaveLength(1);
     expect(attempts[0]?.attempt).toBe(1);
     expect(attempts[0]?.outcome).toBe('completed');
-    expect(attempts[0]?.costUsd).toBe(0.25);
     expect(attempts[0]?.endedAt).toBeGreaterThan(0);
   });
 

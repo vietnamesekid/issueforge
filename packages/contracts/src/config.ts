@@ -14,7 +14,6 @@ export const IssueForgeConfig = z.object({
   harness: z
     .object({
       preferred: HarnessName.default('claude-code'),
-      maxBudgetUsd: z.number().positive().default(2),
       maxTurns: z.number().int().positive().default(30),
       timeoutMs: z.number().int().positive().default(1_800_000),
     })

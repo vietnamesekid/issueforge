@@ -23,10 +23,10 @@ describe('loadConfig', () => {
   it('reads the file `init` actually writes', () => {
     // The bug this test exists for: `init` wrote config.json while the loader read
     // config.yaml, so every config anyone wrote was ignored in silence — including
-    // maxBudgetUsd and forbiddenPaths, which flow into the task card.
-    writeConfig(JSON.stringify({ harness: { maxBudgetUsd: 99 } }));
+    // maxTurns and forbiddenPaths, which flow into the task card.
+    writeConfig(JSON.stringify({ harness: { maxTurns: 99 } }));
 
-    expect(loadConfig(dir).harness.maxBudgetUsd).toBe(99);
+    expect(loadConfig(dir).harness.maxTurns).toBe(99);
   });
 
   it('applies every configured value, not just the first level', () => {
@@ -49,14 +49,14 @@ describe('loadConfig', () => {
     // The common case, and it must stay silent: a repository that never writes a
     // config is not misconfigured.
     const config = loadConfig(dir);
-    expect(config.harness.maxBudgetUsd).toBe(2);
+    expect(config.harness.maxTurns).toBe(30);
     expect(config.policy.forbiddenPaths.length).toBeGreaterThan(0);
   });
 
   it('REFUSES a malformed config rather than silently using defaults', () => {
     // The second half of the bug. Swallowing the error made a broken config
-    // indistinguishable from an absent one, so a typo in maxBudgetUsd would run at
-    // the default budget and nobody would ever be told.
+    // indistinguishable from an absent one, so a typo in maxTurns would run at the
+    // default limit and nobody would ever be told.
     writeConfig('{ not valid json');
 
     expect(() => loadConfig(dir)).toThrow(ConfigError);

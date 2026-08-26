@@ -44,7 +44,6 @@ describe('TaskCard', () => {
     const card = TaskCard.parse(minimal);
     expect(card.constraints.doNotPush).toBe(true);
     expect(card.constraints.resultPath).toBe('artifacts/result.json');
-    expect(card.constraints.maxBudgetUsd).toBeGreaterThan(0);
     // The untrusted-data wording is part of the contract, not adapter boilerplate.
     expect(card.instructions).toContain('UNTRUSTED');
     expect(TaskCard.parse(TaskCard.parse(minimal))).toEqual(card);
@@ -152,9 +151,8 @@ describe('IssueForgeConfig', () => {
   it('an empty config is valid and safe by default', () => {
     const cfg = IssueForgeConfig.parse({});
     expect(cfg.policy.draftPrOnly).toBe(true);
-    // Budget and turn limits must have real values: they are the only bound on what a
-    // run can spend, and a missing config must not mean "unlimited".
-    expect(cfg.harness.maxBudgetUsd).toBeGreaterThan(0);
+    // Turn and time limits must have real values: they are the only bound on how far
+    // a run can go, and a missing config must not mean "unlimited".
     expect(cfg.harness.maxTurns).toBeGreaterThan(0);
     expect(cfg.harness.timeoutMs).toBeGreaterThan(0);
     expect(cfg.policy.forbiddenPaths).toContain('.github/**');

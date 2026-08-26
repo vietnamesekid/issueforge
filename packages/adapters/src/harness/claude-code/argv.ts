@@ -10,7 +10,7 @@ import type { TaskCard } from '@issueforge/contracts';
  * constraints we added were the reason the run failed.
  *
  * What remains is: run non-interactively, do not stall, do not touch the developer's
- * MCP servers, and stay inside a budget.
+ * MCP servers, and stay inside its turn and time limits.
  */
 
 export interface ClaudeArgvOptions {
@@ -70,8 +70,6 @@ export function buildClaudeArgv(options: ClaudeArgvOptions): string[] {
     // enforces wall-clock time independently of both.
     '--max-turns',
     String(constraints.maxTurns),
-    '--max-budget-usd',
-    String(constraints.maxBudgetUsd),
 
     // Pre-assigned, so a session can be correlated with a run even if the process
     // dies before reporting anything.

@@ -52,7 +52,6 @@ export function buildReproduceCard(input: TaskCardInput): TaskCard {
       allowedPaths: ['**'],
       forbiddenPaths: [...new Set([...NEVER_WRITABLE, ...config.policy.forbiddenPaths])],
       maxTurns: config.harness.maxTurns,
-      maxBudgetUsd: config.harness.maxBudgetUsd,
       timeoutMs: config.harness.timeoutMs,
     },
     instructions: REPRODUCE_BRIEF,

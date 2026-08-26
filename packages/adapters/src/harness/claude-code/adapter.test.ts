@@ -45,7 +45,8 @@ const resultLine = (structured: unknown): string =>
     is_error: false,
     result: 'done',
     structured_output: structured,
-    total_cost_usd: 0.1,
+    // Shape taken from a real run: token counts, which is what `usage` now carries.
+    usage: { input_tokens: 2, output_tokens: 4 },
   });
 
 const request = () => ({
@@ -104,7 +105,6 @@ describe('ClaudeCodeAdapter', { timeout: 20_000 }, () => {
     );
     expect(outcome.ok).toBe(true);
     expect(outcome.sessionId).toBe('s1');
-    expect(outcome.costUsd).toBe(0.1);
     // Normalised from the space-joined form a real agent returned.
     expect(outcome.result?.reproCommand).toEqual(['npm', 'test']);
   });

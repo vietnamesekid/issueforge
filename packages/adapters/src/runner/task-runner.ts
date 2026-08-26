@@ -291,7 +291,6 @@ export class TaskRunner {
       outcome: classification.outcome,
       endedAt: Date.now(),
       ...optionalDefined('exitCode', outcome?.exitCode),
-      ...optionalDefined('costUsd', outcome?.costUsd),
     });
 
     store.updateRun(runId, { status: classification.status, detail: classification.detail });

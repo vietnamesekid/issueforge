@@ -191,9 +191,9 @@ export class SqliteRunStore implements RunStore {
   startAttempt(attempt: TaskAttempt): void {
     this.#db
       .prepare(
-        `INSERT INTO tasks (run_id, attempt, harness, pgid, exit_code, outcome, cost_usd,
+        `INSERT INTO tasks (run_id, attempt, harness, pgid, exit_code, outcome,
                             started_at, ended_at)
-         VALUES (${placeholders(9)})`,
+         VALUES (${placeholders(8)})`,
       )
       .run(
         attempt.runId,
@@ -202,7 +202,6 @@ export class SqliteRunStore implements RunStore {
         attempt.pgid ?? null,
         attempt.exitCode ?? null,
         attempt.outcome ?? null,
-        attempt.costUsd ?? null,
         attempt.startedAt,
         attempt.endedAt ?? null,
       );
@@ -214,13 +213,12 @@ export class SqliteRunStore implements RunStore {
     // through would be one more thing to get out of step.
     this.#db
       .prepare(
-        `UPDATE tasks SET outcome = ?, exit_code = ?, cost_usd = ?, ended_at = ?
+        `UPDATE tasks SET outcome = ?, exit_code = ?, ended_at = ?
          WHERE run_id = ? AND attempt = (SELECT MAX(attempt) FROM tasks WHERE run_id = ?)`,
       )
       .run(
         outcome.outcome,
         outcome.exitCode ?? null,
-        outcome.costUsd ?? null,
         outcome.endedAt,
         runId,
         runId,

@@ -80,7 +80,6 @@ export interface RunStore {
 export interface TaskAttemptOutcome {
   outcome: TaskOutcome;
   exitCode?: number;
-  costUsd?: number;
   endedAt: number;
 }
 

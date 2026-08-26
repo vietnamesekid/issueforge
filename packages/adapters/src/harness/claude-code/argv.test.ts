@@ -7,7 +7,7 @@ const card: TaskCard = TaskCardSchema.parse({
   task: 'reproduce',
   issue: { number: 1, title: 't', body: 'b' },
   repository: { slug: 'owner/repo', baseSha: 'a'.repeat(40) },
-  constraints: { allowedPaths: ['test/**'], maxTurns: 12, maxBudgetUsd: 1.5 },
+  constraints: { allowedPaths: ['test/**'], maxTurns: 12 },
 });
 
 const argv = (): string[] =>
@@ -91,10 +91,17 @@ describe('claude argv contract', () => {
     expect(prompt).toMatch(/untrusted data/i);
   });
 
-  it('carries the caller budget rather than trusting the harness to self-limit', () => {
+  it('carries the caller turn limit rather than trusting the harness to self-limit', () => {
     const args = argv();
     expect(valueAfter(args, '--max-turns')).toBe('12');
-    expect(valueAfter(args, '--max-budget-usd')).toBe('1.5');
+  });
+
+  it('never passes a dollar budget', () => {
+    // IssueForge drives a harness the developer already installed and is already
+    // paying for, so a dollar ceiling is the wrong unit: `--max-budget-usd` bounds
+    // API spend, and on a subscription the figure it reports is a client-side
+    // estimate nobody is billed from. Turns and wall-clock are the real limits.
+    expect(argv().join(' ')).not.toContain('--max-budget-usd');
   });
 
   it('pre-assigns a session id and does not persist the session', () => {

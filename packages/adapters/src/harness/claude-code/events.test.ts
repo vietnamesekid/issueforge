@@ -17,7 +17,6 @@ const RESULT_OK = JSON.stringify({
   is_error: false,
   result: 'done',
   structured_output: { verdict: 'reproduced', summary: 's' },
-  total_cost_usd: 0.42,
   num_turns: 8,
   permission_denials: [],
 });
@@ -101,7 +100,6 @@ describe('parseLine', () => {
   it('treats the result line as terminal and reports success', () => {
     const parsed = parseLine(RESULT_OK);
     expect(parsed.terminal?.ok).toBe(true);
-    expect(parsed.terminal?.costUsd).toBe(0.42);
     expect(parsed.events.at(-1)).toMatchObject({ type: 'finished', finalText: 'done' });
   });
 

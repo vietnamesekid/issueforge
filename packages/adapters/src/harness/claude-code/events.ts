@@ -20,10 +20,11 @@ interface ResultLine {
   result?: string;
   structured_output?: unknown;
   session_id?: string;
-  total_cost_usd?: number;
   num_turns?: number;
   permission_denials?: { tool_name?: string; tool_input?: Record<string, unknown> }[];
   terminal_reason?: string;
+  /** Token counts. Measured in work done, not money — see the `usage` event below. */
+  usage?: { input_tokens?: number; output_tokens?: number };
 }
 
 /** What the first `system/init` line tells us about the sandbox we actually got. */
@@ -47,7 +48,6 @@ export interface TerminalOutcome {
   subtype: string;
   finalText: string;
   structured: unknown;
-  costUsd?: number;
   turns?: number;
   denials: number;
   /** Set when the agent reported an injection attempt, so it can be surfaced. */
@@ -191,8 +191,17 @@ function parseResult(line: ResultLine): ParsedLine {
     ),
   }));
 
-  if (line.total_cost_usd !== undefined) {
-    events.push({ type: 'usage', costUsd: line.total_cost_usd });
+  // Tokens, deliberately not dollars. IssueForge drives a harness the developer
+  // already installed and already pays for, so cost is not its business — but "how
+  // much work did this run do" still is, and tokens answer that without pretending to
+  // be a bill.
+  const usage = line.usage;
+  if (usage?.input_tokens !== undefined || usage?.output_tokens !== undefined) {
+    events.push({
+      type: 'usage',
+      ...optionalDefined('inputTokens', usage.input_tokens),
+      ...optionalDefined('outputTokens', usage.output_tokens),
+    });
   }
 
   events.push(
@@ -214,7 +223,6 @@ function parseResult(line: ResultLine): ParsedLine {
       structured: line.structured_output,
       denials: denials.length,
       injectionSuspected: INJECTION_HINT.test(finalText),
-      ...optionalDefined('costUsd', line.total_cost_usd),
       ...optionalDefined('turns', line.num_turns),
     },
   };

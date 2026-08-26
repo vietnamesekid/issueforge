@@ -23,7 +23,7 @@ const CONFIG_FILE = 'config.json';
  * Present but broken is NOT fine. An earlier version read `config.yaml` while `init`
  * wrote `config.json`, and swallowed parse errors on top — so every config anyone
  * wrote was ignored without a word, and a typo was indistinguishable from a missing
- * file. `maxBudgetUsd`, `maxTurns`, `timeoutMs` and `forbiddenPaths` all reach the
+ * file. `maxTurns`, `timeoutMs` and `forbiddenPaths` all reach the
  * harness through this, which made silence the most expensive possible behaviour.
  */
 export function loadConfig(cwd: string = process.cwd()): IssueForgeConfig {

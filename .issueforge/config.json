@@ -1,12 +1,19 @@
 {
   "harness": {
     "preferred": "claude-code",
-    "maxBudgetUsd": 2,
     "maxTurns": 30,
     "timeoutMs": 1800000
   },
   "policy": {
-    "forbiddenPaths": [".github/**", ".git/**", "**/.env", "**/*.pem", "**/id_rsa*"]
+    "forbiddenPaths": [
+      ".github/**",
+      ".git/**",
+      "**/.env",
+      "**/*.pem",
+      "**/id_rsa*"
+    ]
   },
-  "retention": { "days": 14 }
+  "retention": {
+    "days": 14
+  }
 }

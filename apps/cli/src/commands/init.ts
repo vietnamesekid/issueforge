@@ -83,7 +83,6 @@ jobs:
 const CONFIG = `{
   "harness": {
     "preferred": "claude-code",
-    "maxBudgetUsd": 2,
     "maxTurns": 30,
     "timeoutMs": 1800000
   },

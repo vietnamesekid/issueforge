@@ -78,7 +78,6 @@ class ScriptedHarness implements HarnessAdapter {
       ok: this.ok,
       denials: 0,
       injectionSuspected: false,
-      costUsd: 0.31,
       exitCode: 0,
       ...(this.claim !== undefined ? { result: this.claim as never } : {}),
     };
@@ -201,7 +200,6 @@ describe('v0.1 slice — orchestration', { timeout: 120_000 }, () => {
     expect(run?.baseSha).toBe(baseSha);
     expect(run?.harness).toBe('claude-code');
     expect(store.listAttempts(result.runId)).toHaveLength(1);
-    expect(store.listAttempts(result.runId)[0]?.costUsd).toBe(0.31);
     expect(existsSync(join(root, 'runs', result.runId, 'events.jsonl'))).toBe(true);
   });
 

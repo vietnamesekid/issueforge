@@ -75,9 +75,8 @@ export const MIGRATIONS: readonly string[] = [
     -- stays on 'runs', which is what the reaper reads.
     pgid         INTEGER,
     exit_code    INTEGER,
-    -- Why the attempt ended: completed | timeout | cancelled | budget | error.
+    -- Why the attempt ended: completed | timeout | cancelled | error.
     outcome      TEXT,
-    cost_usd     REAL,
     started_at   INTEGER NOT NULL,
     ended_at     INTEGER
   ) STRICT;

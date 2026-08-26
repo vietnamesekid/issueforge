@@ -56,7 +56,6 @@ export interface TaskRow {
   pgid: number | null;
   exit_code: number | null;
   outcome: string | null;
-  cost_usd: number | null;
   started_at: number;
   ended_at: number | null;
 }
@@ -121,7 +120,6 @@ export function toTaskAttempt(row: TaskRow): TaskAttempt {
     ...optional('pgid', row.pgid),
     ...optional('exitCode', row.exit_code),
     ...optional('outcome', row.outcome),
-    ...optional('costUsd', row.cost_usd),
     ...optional('endedAt', row.ended_at),
   });
 }

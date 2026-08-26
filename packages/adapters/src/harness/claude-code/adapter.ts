@@ -177,7 +177,6 @@ class ClaudeCodeRun implements HarnessRun {
       // `optional`, not a truthiness check: exit code 0 is the most common one there
       // is, and `&&` would silently drop it.
       ...optional('exitCode', result.exitCode),
-      ...optionalDefined('costUsd', terminal?.costUsd),
     };
   }
 

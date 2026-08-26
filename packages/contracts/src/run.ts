@@ -40,7 +40,7 @@ export const RunState = z.object({
 });
 
 /** Why a single harness invocation ended. */
-export const TaskOutcome = z.enum(['completed', 'timeout', 'cancelled', 'budget', 'error']);
+export const TaskOutcome = z.enum(['completed', 'timeout', 'cancelled', 'error']);
 
 /**
  * One harness invocation.
@@ -59,8 +59,6 @@ export const TaskAttempt = z.object({
   pgid: z.number().int().positive().optional(),
   exitCode: z.number().int().optional(),
   outcome: TaskOutcome.optional(),
-  /** Client-side estimate where the harness reports one; never billed from. */
-  costUsd: z.number().nonnegative().optional(),
   startedAt: z.number().int().nonnegative(),
   endedAt: z.number().int().nonnegative().optional(),
 });

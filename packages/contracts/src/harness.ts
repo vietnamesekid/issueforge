@@ -45,8 +45,6 @@ export const HarnessEvent = z.discriminatedUnion('type', [
     type: z.literal('usage'),
     inputTokens: z.number().int().nonnegative().optional(),
     outputTokens: z.number().int().nonnegative().optional(),
-    /** Claude Code only, and documented as a client-side estimate. Never bill from it. */
-    costUsd: z.number().nonnegative().optional(),
   }),
   /**
    * An attempt to act outside the permitted boundary. A first-class policy event —
@@ -114,7 +112,6 @@ export const HarnessRunOutcome = z.object({
   ok: z.boolean(),
   result: HarnessResult.optional(),
   exitCode: z.number().int().optional(),
-  costUsd: z.number().nonnegative().optional(),
   denials: z.number().int().nonnegative().default(0),
   /** Set when the harness reported an injection attempt; surfaced to the maintainer. */
   injectionSuspected: z.boolean().default(false),
