@@ -30,12 +30,37 @@ export const DEFAULT_ALLOWED_TOOLS: readonly string[] = [
   'Bash(git status*)',
 ];
 
+/**
+ * Which built-in tools exist at all for this run.
+ *
+ * `--tools` and `--allowedTools` are different controls and BOTH are needed.
+ * `--allowedTools` is a permission list: it says what may be used without asking, but
+ * every other built-in is still present and reachable. Observed on a real run
+ * configured with `--allowedTools` alone: the session started with 27 tools including
+ * WebFetch and WebSearch — a network egress path for a run processing an
+ * attacker-authored issue body.
+ *
+ * `--tools` decides the set itself. With it, the same run starts with exactly these.
+ */
+export const DEFAULT_TOOLS: readonly string[] = ['Read', 'Write', 'Edit', 'Glob', 'Grep', 'Bash'];
+
+/**
+ * Tools the harness adds on its own, which the posture check must not reject.
+ *
+ * `StructuredOutput` appears whenever `--json-schema` is passed — it is how the
+ * schema-conforming result is returned, so asking for a structured result implies it.
+ * Observed on a real run: the session started with the six requested tools plus this
+ * one, and treating it as unrequested killed the run before any work happened.
+ */
+export const IMPLICIT_TOOLS: readonly string[] = ['StructuredOutput'];
+
 export interface ClaudeArgvOptions {
   taskCardPath: string;
   resultSchema: unknown;
   sessionId: string;
   card: Pick<TaskCard, 'constraints'>;
   allowedTools?: readonly string[];
+  tools?: readonly string[];
 }
 
 /**
@@ -65,10 +90,16 @@ export function buildClaudeArgv(options: ClaudeArgvOptions): string[] {
     // stricter older behaviour.
     '--verbose',
 
+    // Restrict which tools EXIST. Without this the session starts with every
+    // built-in, including WebFetch and WebSearch — verified on a real run.
+    '--tools',
+    ...(options.tools ?? DEFAULT_TOOLS),
+
     // Deny rather than prompt, so a non-interactive run can never stall...
     '--permission-mode',
     'dontAsk',
-    // ...paired with the allowlist that keeps it able to work at all.
+    // ...paired with the allowlist that keeps it able to work at all. This governs
+    // what may be used unattended; `--tools` above governs what is there to use.
     '--allowedTools',
     ...(options.allowedTools ?? DEFAULT_ALLOWED_TOOLS),
 

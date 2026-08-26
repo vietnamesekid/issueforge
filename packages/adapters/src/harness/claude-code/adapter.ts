@@ -3,7 +3,7 @@ import { promisify } from 'node:util';
 import type { HarnessCapabilities, HarnessEvent, HarnessRunOutcome } from '@issueforge/contracts';
 import { HarnessContractError, type HarnessAdapter, type HarnessRun, type HarnessRunRequest } from '@issueforge/core';
 import { spawnSupervised, type SupervisedProcess } from '../../process/index.js';
-import { buildClaudeArgv, DEFAULT_ALLOWED_TOOLS } from './argv.js';
+import { buildClaudeArgv, DEFAULT_TOOLS, IMPLICIT_TOOLS } from './argv.js';
 import { parseLine, readClaim, type SessionPosture, type TerminalOutcome } from './events.js';
 
 const execFileAsync = promisify(execFile);
@@ -178,8 +178,14 @@ function checkPosture(posture: SessionPosture): string | undefined {
   return undefined;
 }
 
-/** Tool names are reported bare; the allowlist may scope them, e.g. `Bash(npm *)`. */
+/**
+ * The posture check compares against `--tools`, not `--allowedTools`.
+ *
+ * `system/init` reports which tools EXIST, which is what `--tools` sets; the
+ * permission allowlist is a different question and its scoped entries (`Bash(npm *)`)
+ * never appear here.
+ */
 function isAllowed(tool: string): boolean {
-  return DEFAULT_ALLOWED_TOOLS.some((allowed) => allowed === tool || allowed.startsWith(`${tool}(`));
+  return DEFAULT_TOOLS.includes(tool) || IMPLICIT_TOOLS.includes(tool);
 }
 

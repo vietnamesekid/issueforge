@@ -44,6 +44,23 @@ describe('claude argv contract', () => {
     expect(valueAfter(args, '--setting-sources')).toBe('');
   });
 
+  it('restricts which tools EXIST, not only which are permitted', () => {
+    // These are different controls and both are needed. --allowedTools is a
+    // permission list; every other built-in is still present and reachable. A real
+    // run configured with --allowedTools alone started with 27 tools including
+    // WebFetch and WebSearch — network egress for a run processing an
+    // attacker-authored issue body.
+    const args = argv();
+    const toolsIndex = args.indexOf('--tools');
+    expect(toolsIndex).toBeGreaterThan(-1);
+
+    const tools = args.slice(toolsIndex + 1, args.indexOf('--permission-mode'));
+    expect(tools).not.toContain('WebFetch');
+    expect(tools).not.toContain('WebSearch');
+    expect(tools).toContain('Read');
+    expect(tools).toContain('Bash');
+  });
+
   it('never lets `dontAsk` ship without an explicit tool allowlist', () => {
     // Bare dontAsk denies every write: the agent leaks nothing and does nothing.
     // A defence that blocks the product's own function is an outage.

@@ -121,6 +121,21 @@ describe('ClaudeCodeAdapter', { timeout: 20_000 }, () => {
     await expect(run.outcome()).rejects.toThrow(/MCP servers/i);
   });
 
+  it('accepts a tool the harness adds for us', async () => {
+    // StructuredOutput appears whenever --json-schema is passed: asking for a
+    // structured result implies it. A real run died here because the posture check
+    // treated a tool our own configuration caused as an intrusion.
+    fakeClaude([
+      initLine([], ['Read', 'Write', 'StructuredOutput']),
+      resultLine({ verdict: 'needs-info', summary: '' }),
+    ]);
+
+    const run = new ClaudeCodeAdapter().run(request());
+    await drain(run);
+
+    await expect(run.outcome()).resolves.toMatchObject({ ok: true });
+  });
+
   it('refuses a sandbox carrying tools that were never requested', async () => {
     fakeClaude([initLine([], ['Read', 'WebFetch']), resultLine({ verdict: 'reproduced', summary: '' })]);
 

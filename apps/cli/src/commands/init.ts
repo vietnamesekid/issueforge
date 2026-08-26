@@ -62,11 +62,16 @@ jobs:
       - name: Run IssueForge locally
         env:
           ISSUEFORGE_GITHUB_TOKEN: \${{ github.token }}
-          # --bare never reads an interactive login, so the key must be explicit.
+          # Optional: an existing Claude Code login is enough. Set this as a
+          # repository secret only for a headless machine with no interactive login.
           ANTHROPIC_API_KEY: \${{ secrets.ANTHROPIC_API_KEY }}
-        run: >
-          issueforge handle github-event
-          --event-path "\$GITHUB_EVENT_PATH"
+        run: |
+          # A self-hosted runner does not inherit an interactive shell's PATH, so a
+          # version-managed node (nvm, fnm, asdf, volta) is invisible to it and both
+          # issueforge and the claude it spawns would be "command not found".
+          # ISSUEFORGE_BIN lets the runner be told where they live.
+          export PATH="\${ISSUEFORGE_BIN:-\$HOME/.local/bin}:\$PATH"
+          issueforge handle github-event --event-path "\$GITHUB_EVENT_PATH"
 `;
 
 /**
