@@ -7,5 +7,7 @@
     "@issueforge/contracts": "0.0.0",
     "@issueforge/core": "0.0.0"
   },
-  "changesets": []
+  "changesets": [
+    "olive-donkeys-smash"
+  ]
 }
