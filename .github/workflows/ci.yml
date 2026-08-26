@@ -42,8 +42,6 @@ jobs:
       # type-checks and runs the source, while what reaches a user is the tarball.
       # It packs the real thing and checks bin paths, exports and file layout —
       # exactly the class of defect that shipped a bin npm silently strips.
-      - run: pnpm --filter issueforge exec publint
-
       # Coverage runs on one matrix leg only: the number is identical across Node
       # versions, and two legs writing the same badge would race.
       - name: Coverage

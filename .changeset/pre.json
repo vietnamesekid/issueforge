@@ -1,0 +1,11 @@
+{
+  "mode": "pre",
+  "tag": "alpha",
+  "initialVersions": {
+    "issueforge": "0.1.0-alpha.2",
+    "@issueforge/adapters": "0.0.0",
+    "@issueforge/contracts": "0.0.0",
+    "@issueforge/core": "0.0.0"
+  },
+  "changesets": []
+}

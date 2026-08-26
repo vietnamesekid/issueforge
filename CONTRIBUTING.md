@@ -58,3 +58,38 @@ and is unrelated to Vite.
 IssueForge orchestrates the outer workflow; the harness owns its own agent loop. If a change starts
 to require planning steps, choosing tools, or calling a model, that is **scope drift** — say so in
 the PR rather than building it.
+
+## Releasing
+
+Versions are never edited by hand. `changeset version` owns `apps/cli/package.json`,
+and tsup injects that value into the binary at build time, so the number the CLI
+reports cannot drift from the manifest.
+
+Every change that should appear in the changelog needs a changeset:
+
+```bash
+pnpm changeset          # pick a bump, write one line describing the effect
+```
+
+Commit that file with your work. On merge to `main` the Release workflow opens a
+**"chore: version packages"** PR that applies the bumps and writes `CHANGELOG.md`.
+Merging that PR is the decision to release — it publishes to npm with a provenance
+attestation and creates the GitHub Release.
+
+A change with no user-visible effect (refactor, test, CI) needs no changeset.
+
+### Prereleases
+
+The repo is currently in prerelease mode, pinned by `.changeset/pre.json`. Versions
+come out as `0.1.0-alpha.N` and publish under the `alpha` dist-tag, so `latest` is
+left alone and `npm install -g issueforge` does not resolve to them.
+
+To ship the first stable release:
+
+```bash
+pnpm changeset pre exit    # commit the result, then release as usual
+```
+
+Do not run `changeset pre enter` again afterwards without reading the changesets
+prerelease docs — leaving and re-entering prerelease mode mid-stream produces
+version numbers that surprise people.

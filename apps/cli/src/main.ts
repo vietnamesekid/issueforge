@@ -31,10 +31,20 @@ import { declinedReason, taskIsPermitted } from './commands/policy.js';
  * depend on interfaces.
  */
 
-// Kept in step with apps/cli/package.json by tests/packaging.test.ts: a release
-// that bumped only the manifest would ship a binary reporting the old number,
-// so the version a user pastes into a bug report would be the wrong one.
-const VERSION = '0.1.0-alpha.2';
+/**
+ * Replaced at build time with the version from apps/cli/package.json.
+ *
+ * It was a hand-written constant, which meant a release had to remember to edit two
+ * files; `changeset version` only touches the manifest, so the binary would have
+ * reported a stale number and the version a user pastes into a bug report would be
+ * wrong. tsup substitutes this via `define`, so the built bundle still holds a plain
+ * literal and nothing is read from disk at runtime — `files` ships dist/ only, so
+ * reading package.json from the installed CLI is not an option.
+ *
+ * The fallback is for `node src/main.ts`, which runs unbundled with no substitution.
+ */
+declare const __ISSUEFORGE_VERSION__: string | undefined;
+const VERSION = typeof __ISSUEFORGE_VERSION__ === 'string' ? __ISSUEFORGE_VERSION__ : '0.0.0-dev';
 
 /**
  * Exit codes, so a workflow step can branch on the outcome.

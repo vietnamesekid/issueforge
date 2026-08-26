@@ -1,36 +1,52 @@
-# Publishes the CLI to npm with a provenance attestation.
+# Versioning and publishing, driven by changesets.
 #
-# Trusted publishing (OIDC) rather than a long-lived NPM_TOKEN: npm restricted tokens
-# that bypass 2FA, so this is the supported path, and it is what lets npm show the
-# "Provenance" panel linking the tarball back to the exact commit that built it.
+# Two paths, both starting from a push to main:
 #
-# Manual dispatch, never on push. A release is a decision.
+#  1. Changeset files are pending -> the action opens (or updates) a "Version
+#     Packages" PR that bumps the version and writes CHANGELOG.md. Nothing is
+#     published. Merging that PR is the decision to release.
+#  2. That PR has just been merged, so no changesets remain -> the action publishes
+#     what the merge produced.
+#
+# The version is never edited by hand. `changeset version` owns apps/cli/package.json,
+# and tsup injects that value into the binary, so the two cannot drift.
+#
+# While `.changeset/pre.json` exists the repo is in prerelease mode: versions come
+# out as 0.1.0-alpha.N and publish under the `alpha` dist-tag, leaving `latest`
+# alone. `pnpm changeset pre exit` ends that and the next release is stable.
 name: Release
 
 on:
+  push:
+    branches: [main]
   workflow_dispatch:
-    inputs:
-      tag:
-        description: 'npm dist-tag to publish under'
-        required: true
-        default: 'alpha'
-        type: choice
-        options:
-          - alpha
-          - beta
-          - latest
+
+concurrency:
+  group: release-${{ github.ref_name }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
 
 jobs:
-  publish:
+  release:
     runs-on: ubuntu-latest
+    # Never run in a fork: it has no npm identity, and the failure would be noise
+    # for a contributor who cannot fix it.
+    if: github.repository == 'vietnamesekid/issueforge'
     permissions:
-      contents: read
-      # Required for OIDC trusted publishing and the provenance attestation.
-      # Without it the publish still succeeds but ships NO attestation, and the
-      # failure is invisible until someone looks at the package page.
+      # OIDC trusted publishing and the provenance attestation. Without id-token the
+      # publish still succeeds but ships NO attestation, and that is invisible until
+      # someone looks at the package page.
       id-token: write
+      # The action commits the version bump and opens the release PR.
+      contents: write
+      pull-requests: write
     steps:
       - uses: actions/checkout@v4
+        with:
+          # changesets needs history to work out what changed since the last tag.
+          fetch-depth: 0
 
       - uses: pnpm/action-setup@v4
 
@@ -42,43 +58,41 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
-      # Trusted publishing needs npm >=11.5.1. The runner's bundled npm can lag,
-      # and an older one fails with a confusing auth error rather than naming the
-      # real cause.
+      # Trusted publishing needs npm >=11.5.1; the runner's bundled npm can lag, and
+      # an older one fails with a confusing auth error rather than naming the cause.
       - run: npm install -g npm@latest
 
+      # The full gate runs BEFORE anything is versioned or published. `ci:release`
+      # builds again, cheaply, so the tarball is built from the versioned manifest.
       - run: pnpm check
 
-      # Build explicitly rather than relying on `prepublishOnly` to reach it through
-      # `pnpm test`. A fresh clone has no dist/, so publishing an unbuilt tree would
-      # ship a package whose bin points at a file that does not exist — and the chain
-      # that currently prevents that is three scripts deep and easy to break.
-      - run: pnpm build
+      - uses: changesets/action@v1
+        id: changesets
+        with:
+          version: pnpm ci:version
+          publish: pnpm ci:release
+          commit: 'chore: version packages'
+          title: 'chore: version packages'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Provenance is opt-in per publish; changeset publish honours this env var.
+          NPM_CONFIG_PROVENANCE: 'true'
 
-      # Fail loudly here rather than publishing a broken artifact. `files` limits the
-      # tarball to dist/, so a missing bundle produces a package that installs fine
-      # and then cannot run at all.
-      - name: Verify the built artifact exists and runs
+      # `changeset publish` creates the git tags. A GitHub Release makes them
+      # visible, and is skipped entirely when the run only opened the version PR.
+      - name: Create GitHub Releases
+        if: steps.changesets.outputs.published == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PUBLISHED: ${{ steps.changesets.outputs.publishedPackages }}
         run: |
-          test -f apps/cli/dist/main.js || { echo "::error::dist/main.js missing after build"; exit 1; }
-          node apps/cli/dist/main.js --version
-
-      # Lints the tarball npm will actually publish: bin paths, exports, file layout.
-      - run: pnpm --filter issueforge exec publint
-
-      # Refuse to republish a version that already exists, with a clear message
-      # instead of npm's E403. Version bumps live in package.json and main.ts, and
-      # tests/packaging.test.ts fails if the two disagree.
-      - name: Check this version is not already published
-        run: |
-          VERSION=$(node -p "require('./apps/cli/package.json').version")
-          if npm view "issueforge@$VERSION" version >/dev/null 2>&1; then
-            echo "::error::issueforge@$VERSION is already on npm. Bump the version in apps/cli/package.json and the VERSION constant in apps/cli/src/main.ts."
-            exit 1
-          fi
-          echo "publishing issueforge@$VERSION"
-
-      # `prepack` copies README/LICENSE into the package; `prepublishOnly` re-runs
-      # the checks above as a last line of defence.
-      - run: npm publish --provenance --tag "${{ inputs.tag }}"
-        working-directory: apps/cli
+          echo "$PUBLISHED" | node -e '
+            let s = "";
+            process.stdin.on("data", (d) => (s += d)).on("end", () => {
+              for (const p of JSON.parse(s || "[]")) {
+                // Any version carrying a hyphen is a prerelease (0.1.0-alpha.3).
+                const pre = p.version.includes("-") ? "--prerelease" : "";
+                console.log(`gh release create v${p.version} --title v${p.version} --generate-notes ${pre} || true`);
+              }
+            });
+          ' | sh

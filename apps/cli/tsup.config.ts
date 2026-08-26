@@ -1,4 +1,11 @@
 import { defineConfig } from 'tsup';
+import { readFileSync } from 'node:fs';
+
+// The single source of truth for the version. `changeset version` edits this file
+// and nothing else, so reading it here is what keeps the binary honest.
+const { version } = JSON.parse(readFileSync(new URL('./package.json', import.meta.url), 'utf8')) as {
+  version: string;
+};
 
 export default defineConfig({
   entry: ['src/main.ts'],
@@ -7,6 +14,8 @@ export default defineConfig({
   // Declarations come from `tsc --build`; this pass only produces the runnable
   // bundle, so the two do not duplicate work or disagree.
   dts: false,
+  // Substituted into the bundle as a literal; see the VERSION comment in main.ts.
+  define: { __ISSUEFORGE_VERSION__: JSON.stringify(version) },
   /**
    * Bundle the workspace packages into the CLI.
    *

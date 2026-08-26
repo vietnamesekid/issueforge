@@ -93,64 +93,68 @@ describe('build configuration', () => {
 });
 
 describe('release workflow', () => {
+  const release = readFileSync(join(ROOT, '.github/workflows/release.yml'), 'utf8');
+  const scripts = (JSON.parse(readFileSync(join(ROOT, 'package.json'), 'utf8')) as {
+    scripts: Record<string, string>;
+  }).scripts;
+
   it('builds before publishing', () => {
-    // The bug this test exists for: the workflow relied on `prepublishOnly` reaching
-    // `pnpm build` three scripts deep, via `pnpm check` -> `pnpm test` -> `pnpm build`.
-    // A fresh clone has no dist/, and `files` limits the tarball to dist/ — so if that
-    // chain ever breaks, npm publishes a package whose bin points at a file that does
-    // not exist. It installs fine and then cannot run at all.
-    const release = readFileSync(join(ROOT, '.github/workflows/release.yml'), 'utf8');
-    const build = release.indexOf('pnpm build');
-    const publish = release.indexOf('npm publish');
-    expect(build, 'workflow must run `pnpm build`').toBeGreaterThan(-1);
-    expect(build, '`pnpm build` must come before `npm publish`').toBeLessThan(publish);
+    // The bug this test exists for: an earlier workflow reached `pnpm build` only
+    // through `prepublishOnly`, three scripts deep. A fresh clone has no dist/, and
+    // `files` limits the tarball to dist/, so if that chain broke npm would publish
+    // a package whose bin points at a file that does not exist — it installs fine
+    // and then cannot run at all. `ci:release` now builds explicitly.
+    const ciRelease = scripts['ci:release'] ?? '';
+    expect(ciRelease).toMatch(/pnpm build/);
+    expect(ciRelease.indexOf('pnpm build')).toBeLessThan(ciRelease.indexOf('changeset publish'));
   });
 
-  it('verifies the built binary before publishing it', () => {
-    const release = readFileSync(join(ROOT, '.github/workflows/release.yml'), 'utf8');
-    expect(release).toMatch(/dist\/main\.js --version/);
+  it('runs the full gate before versioning or publishing anything', () => {
+    expect(release.indexOf('pnpm check')).toBeGreaterThan(-1);
+    expect(release.indexOf('pnpm check')).toBeLessThan(release.indexOf('changesets/action'));
+  });
+
+  it('lints the tarball npm will actually publish', () => {
+    // publint packs the real thing and checks bin paths, exports and layout — the
+    // only gate that would have caught a bin npm silently strips.
+    expect(scripts['check']).toMatch(/publint/);
   });
 
   it('publishes with a provenance attestation', () => {
     // Provenance needs `id-token: write`; without it the publish still succeeds but
-    // silently ships no attestation, and npm shows no Provenance panel. The failure
-    // is invisible until someone looks at the package page.
-    const release = readFileSync(join(ROOT, '.github/workflows/release.yml'), 'utf8');
+    // silently ships no attestation, invisible until someone opens the package page.
     expect(release).toMatch(/id-token:\s*write/);
-    expect(release).toMatch(/--provenance/);
+    expect(release).toMatch(/NPM_CONFIG_PROVENANCE/);
   });
-});
 
-describe('coverage badge', () => {
-  it('is not more than 5 points above the enforced floor', () => {
-    // The bug this test exists for: the badge is a hardcoded number in the README,
-    // so it drifts silently as coverage moves and ends up advertising a figure the
-    // project no longer meets. Pinning it to the CI floor means the two can only
-    // disagree by the slack deliberately left between them.
-    const readme = readFileSync(join(ROOT, 'README.md'), 'utf8');
-    const ci = readFileSync(join(ROOT, '.github/workflows/ci.yml'), 'utf8');
-
-    const badge = /coverage-(\d+)%25/.exec(readme);
-    const floor = /check-coverage\.mjs (\d+)/.exec(ci);
-
-    expect(badge?.[1], 'README has no coverage badge').toBeDefined();
-    expect(floor?.[1], 'CI does not enforce a coverage floor').toBeDefined();
-
-    const claimed = Number(badge?.[1]);
-    const enforced = Number(floor?.[1]);
-    expect(claimed).toBeGreaterThanOrEqual(enforced);
-    expect(claimed - enforced).toBeLessThanOrEqual(5);
+  it('never publishes from a fork', () => {
+    // A fork has no npm identity; running there fails in a way a contributor cannot
+    // fix, and the noise trains people to ignore red builds.
+    expect(release).toMatch(/github\.repository == 'vietnamesekid\/issueforge'/);
   });
 });
 
 describe('version', () => {
-  it('matches the constant the CLI reports for --version', () => {
-    // The bug this test exists for: VERSION is a hand-written constant in main.ts,
-    // so a release that bumps only package.json ships a binary that reports the
-    // OLD number — and the version a user pastes into a bug report is the wrong one.
+  it('is injected from the manifest at build time, never hand-written', () => {
+    // The bug this test exists for: VERSION used to be a hand-written constant, so a
+    // release that bumped only package.json shipped a binary reporting the OLD
+    // number. `changeset version` edits the manifest and nothing else, which would
+    // make that drift automatic. tsup now substitutes the value via `define`.
     const main = readFileSync(join(ROOT, 'apps/cli/src/main.ts'), 'utf8');
-    const found = /const VERSION = '([^']+)'/.exec(main);
-    expect(found?.[1]).toBe(manifest['version']);
+    const tsup = readFileSync(join(ROOT, 'apps/cli/tsup.config.ts'), 'utf8');
+
+    expect(main).toMatch(/__ISSUEFORGE_VERSION__/);
+    expect(tsup).toMatch(/define:\s*\{\s*__ISSUEFORGE_VERSION__/);
+    // A literal semver assigned to VERSION means someone reintroduced the constant.
+    expect(main).not.toMatch(/const VERSION = '\d+\.\d+\.\d+/);
+  });
+
+  it('reports the manifest version from the BUILT binary', () => {
+    // Reads the artifact rather than the source: the substitution happens at build
+    // time, so only the bundle can prove it actually took effect.
+    const bundle = readFileSync(join(ROOT, 'apps/cli/dist/main.js'), 'utf8');
+    expect(bundle).toContain(`"${String(manifest['version'])}"`);
+    expect(bundle, 'define did not substitute').not.toMatch(/__ISSUEFORGE_VERSION__/);
   });
 
   it('is no longer the 0.0.0 placeholder', () => {

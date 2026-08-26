@@ -192,5 +192,10 @@ exception.
   (`noExternal`) because `workspace:*` is unresolvable on a global install.
 - Commits: conventional prefix (`feat:`, `fix:`, `refactor:`), subject as a sentence describing
   the effect, body explaining *why* with measured evidence.
+- **Never edit a version by hand.** `changeset version` owns `apps/cli/package.json`, and tsup
+  injects it into the binary via `define` — reintroducing a `const VERSION = '1.2.3'` puts the
+  drift back and `tests/packaging.test.ts` fails. A user-visible change needs `pnpm changeset`;
+  a refactor or test-only change does not. `.changeset/pre.json` pins the repo to `alpha`
+  versions, published under the `alpha` dist-tag so `latest` is untouched.
 - Keep this file self-contained: it is read in fresh clones and in the worktree a run gets, so
   a pointer to an uncommitted file reads as a broken instruction. State the rule here instead.
