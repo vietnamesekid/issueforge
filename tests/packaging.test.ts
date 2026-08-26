@@ -7,7 +7,7 @@
  * see them.
  */
 import { describe, it, expect } from 'vitest';
-import { execFileSync } from 'node:child_process';
+import { spawnSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
@@ -322,8 +322,26 @@ describe('colour detection in the built binary', () => {
       ...Object.entries(over),
     ]);
 
-  const run = (args: readonly string[], env: NodeJS.ProcessEnv): string =>
-    execFileSync('node', [cli, ...args], { encoding: 'utf8', env, stdio: ['ignore', 'pipe', 'pipe'] });
+  /**
+   * stdout, whatever the exit code.
+   *
+   * `execFileSync` THROWS on a non-zero exit, and `doctor` exits 1 whenever the
+   * machine is missing something — no `gh` login, no Claude Code. That is correct
+   * behaviour and exactly what a CI runner looks like, so asserting through
+   * execFileSync made these tests pass locally and fail on CI for a reason that had
+   * nothing to do with colour. `spawnSync` reports the same output without throwing;
+   * the exit code is deliberately ignored because it is machine-dependent and not
+   * what any assertion here is about.
+   */
+  const run = (args: readonly string[], env: NodeJS.ProcessEnv): string => {
+    const result = spawnSync('node', [cli, ...args], {
+      encoding: 'utf8',
+      env,
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+    if (result.error !== undefined) throw result.error;
+    return result.stdout;
+  };
 
   it('emits NO escape sequences when stdout is captured', () => {
     expect(run(['doctor'], cleanEnv())).not.toContain(ESC);
