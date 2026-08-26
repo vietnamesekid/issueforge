@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { IssueForgeConfig, repoSlug, sha } from '@issueforge/contracts';
-import { buildReproduceCard } from './task-card.js';
+import { buildFixCard, buildReproduceCard } from './task-card.js';
 import { ALWAYS_FORBIDDEN } from './write-boundary.js';
 
 const config = IssueForgeConfig.parse({});
@@ -98,5 +98,66 @@ describe('buildReproduceCard', () => {
 
   it('lets the harness write anywhere else — method is its decision', () => {
     expect(card().constraints.allowedPaths).toEqual(['**']);
+  });
+});
+
+describe('buildFixCard', () => {
+  const fixCard = (overrides = {}) =>
+    buildFixCard({
+      issue: { number: 1, title: 'a bug', body: 'it breaks' },
+      repo: repoSlug(),
+      baseSha: sha(),
+      config,
+      ...overrides,
+    });
+
+  it('is a fix task, not a reproduce one', () => {
+    expect(fixCard().task).toBe('fix');
+  });
+
+  it('enforces the same write boundary as reproduce', () => {
+    // A fix WRITES, so the paths nothing may touch matter more here, not less.
+    for (const path of ALWAYS_FORBIDDEN) {
+      expect(fixCard().constraints.forbiddenPaths, `must forbid ${path}`).toContain(path);
+    }
+  });
+
+  it('requires a test that failed before the change and passes after', () => {
+    // A fix for a defect nobody observed is a guess, and a test written afterwards
+    // tends to pass for the wrong reason.
+    expect(fixCard().instructions).toMatch(/FAILED before.*PASSES after/is);
+  });
+
+  it('demands a draft PR on a new branch, and forbids merging', () => {
+    const brief = fixCard().instructions;
+    expect(brief).toMatch(/--draft/);
+    expect(brief).toMatch(/never merge/i);
+    expect(brief).toMatch(/NEW branch|never on the default branch/i);
+  });
+
+  it('tells the agent to open no PR when it could not fix the issue', () => {
+    // Otherwise "could-not-fix" arrives as an empty draft PR a reviewer has to close.
+    expect(fixCard().instructions).toMatch(/could not fix/i);
+    expect(fixCard().instructions).toMatch(/Open no PR/i);
+  });
+
+  it('passes prior findings through when there are any', () => {
+    const withPrior = fixCard({ priorArtifacts: ['reproduce run said: no "=" present'] });
+    expect(withPrior.priorArtifacts).toEqual(['reproduce run said: no "=" present']);
+  });
+
+  it('runs without prior findings — a maintainer may label fix directly', () => {
+    // Requiring a prior reproduce would put IssueForge back to adjudicating a decision
+    // the maintainer already made by applying the label.
+    expect(fixCard().priorArtifacts).toEqual([]);
+  });
+
+  it('still refuses to dictate method', () => {
+    expect(fixCard().instructions).not.toMatch(/\bvitest\b|\bjest\b|\bnpm test\b/i);
+    expect(fixCard().instructions).toMatch(/your call/i);
+  });
+
+  it('keeps the untrusted-input warning first', () => {
+    expect(fixCard().instructions.split('\n')[0]).toMatch(/UNTRUSTED/);
   });
 });

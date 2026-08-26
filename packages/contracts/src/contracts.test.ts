@@ -102,8 +102,17 @@ describe('HarnessResult', () => {
 
 describe('Verdict', () => {
   it('is the same set a harness may claim', () => {
+    // Not a hand-copied list: pinning the members here is what let the CLI's exit-code
+    // table drift last time. What must hold is that the two schemas agree.
     expect(Verdict.options).toEqual(HarnessResult.shape.verdict.options);
-    expect(Verdict.options).toEqual(['reproduced', 'cannot-reproduce', 'needs-info']);
+  });
+
+  it('covers both task kinds, and shares needs-info between them', () => {
+    // A verdict is written straight into a run's status, so every task's conclusions
+    // have to live in one enum.
+    expect(Verdict.options).toContain('reproduced');
+    expect(Verdict.options).toContain('fixed');
+    expect(Verdict.options).toContain('needs-info');
   });
 
   it('is a SUBSET of RunStatus, because a verdict is recorded as the run status', () => {

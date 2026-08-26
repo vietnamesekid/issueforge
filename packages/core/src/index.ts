@@ -15,7 +15,7 @@ export type { RunStore, RunPatch, RunFilter, TaskAttemptOutcome } from './ports/
 export { isTerminal, mayHoldProcesses } from './domain/run-status.js';
 export { classifyAttempt, classifyFailure } from './domain/attempt-outcome.js';
 export type { AttemptClassification, AttemptFailure } from './domain/attempt-outcome.js';
-export { buildReproduceCard } from './domain/task-card.js';
+export { buildReproduceCard, buildFixCard } from './domain/task-card.js';
 export type { TaskCardInput } from './domain/task-card.js';
 export { checkWriteBoundary, describeViolations, ALWAYS_FORBIDDEN } from './domain/write-boundary.js';
 export type { WriteBoundary, BoundaryViolation } from './domain/write-boundary.js';

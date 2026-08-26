@@ -2,10 +2,10 @@ import { execFileSync } from 'node:child_process';
 import { Command } from 'commander';
 import type { RunId, RunStatus, Sha } from '@issueforge/contracts';
 import { RepoSlug, Sha as ShaSchema, Verdict } from '@issueforge/contracts';
-import { reapOrphans } from '@issueforge/adapters';
+import { reapOrphans, FIX, REPRODUCE, type TaskDefinition } from '@issueforge/adapters';
 import { createContext } from './context.js';
 import { NotOurLabelError, parseEventFile } from './commands/handle-github-event.js';
-import { runReproduceTask } from './commands/run-task.js';
+import { runTask } from './commands/run-task.js';
 import { collectStatus, renderStatusTable } from './commands/status.js';
 import { hasBlockingProblem, renderDoctor, runDoctor } from './commands/doctor.js';
 import { renderInit, runInit } from './commands/init.js';
@@ -35,6 +35,17 @@ const VERSION = '0.0.0';
  * two indistinguishable to anything scripting this.
  */
 const EXIT = { ok: 0, failed: 1, blocked: 2 } as const;
+
+/**
+ * Intent label → the task it runs.
+ *
+ * `retry` and `cancel` are absent on purpose: they act on a run that already exists
+ * rather than starting a new one, so they need a different command shape.
+ */
+const TASKS: Partial<Record<string, TaskDefinition>> = {
+  reproduce: REPRODUCE,
+  fix: FIX,
+};
 
 export function buildProgram(): Command {
   const program = new Command();
@@ -68,14 +79,18 @@ export function buildProgram(): Command {
         throw error;
       }
 
-      if (event.intent !== 'reproduce') {
+      const task = TASKS[event.intent];
+      if (task === undefined) {
+        // `retry` and `cancel` are verbs on an existing run rather than task kinds, so
+        // they need a different shape than this command has. Declining is honest; exit
+        // 0 because a recognised-but-unimplemented label is not a failure.
         if (options.json === true) emit({ skipped: true, intent: event.intent });
-        process.stderr.write(`intent "${event.intent}" is not implemented in v0.1\n`);
+        process.stderr.write(`intent "${event.intent}" is not implemented yet\n`);
         return;
       }
 
       const context = createContext();
-      const result = await runReproduceTask(context, {
+      const result = await runTask(context, task, {
         repo: RepoSlug.parse(event.repo),
         issueNumber: event.issueNumber,
         issue: event.issue,
@@ -94,7 +109,7 @@ export function buildProgram(): Command {
 
   program
     .command('run')
-    .argument('<task>', 'task to run; only "reproduce" is supported')
+    .argument('<task>', 'task to run: "reproduce" or "fix"')
     .requiredOption('--issue <number>', 'issue number', Number)
     .requiredOption('--repo <slug>', 'owner/repo')
     .option('--title <text>', 'issue title', '')
@@ -118,15 +133,16 @@ export function buildProgram(): Command {
           json?: boolean;
         },
       ) => {
-        if (task !== 'reproduce') {
-          fail(`unknown task: ${task}`);
+        const definition = TASKS[task];
+        if (definition === undefined) {
+          fail(`unknown task: ${task}. Try "reproduce" or "fix".`);
           return;
         }
 
         const context = createContext();
         const remote = options.remote ?? `https://github.com/${options.repo}.git`;
 
-        const result = await runReproduceTask(context, {
+        const result = await runTask(context, definition, {
           // Straight from argv, so parsed here rather than trusted. A bad slug now
           // fails at the boundary with a readable message instead of part-way through
           // a run that has already taken the issue lock.
@@ -293,10 +309,11 @@ function report(
  */
 function exitCodeFor(status: RunStatus): number {
   if (status === 'blocked') return EXIT.blocked;
-  // A conclusion the harness reached, including `needs-info`. "I could not tell from
-  // this issue" is a real finding reported to the issue for a human to act on;
-  // exiting non-zero would mark a working run red in the Actions UI and train
-  // maintainers to ignore red. Non-zero is reserved for IssueForge itself failing.
+  // A conclusion the harness reached, including `needs-info` and `could-not-fix`.
+  // "I could not tell from this issue" and "I could not fix it" are real findings
+  // reported for a human to act on; exiting non-zero would mark a working run red in
+  // the Actions UI and train maintainers to ignore red. Non-zero is reserved for
+  // IssueForge itself failing.
   if ((Verdict.options as readonly string[]).includes(status)) return EXIT.ok;
   return EXIT.failed;
 }

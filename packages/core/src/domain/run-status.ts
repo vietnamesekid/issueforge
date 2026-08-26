@@ -25,6 +25,8 @@ const LIFECYCLE: Record<RunStatus, Lifecycle> = {
 
   reproduced: 'finished',
   'cannot-reproduce': 'finished',
+  fixed: 'finished',
+  'could-not-fix': 'finished',
   'needs-info': 'finished',
   blocked: 'finished',
   cancelled: 'finished',

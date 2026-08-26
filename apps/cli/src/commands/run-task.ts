@@ -5,11 +5,11 @@ import {
   type RunStatus,
   type Sha,
 } from '@issueforge/contracts';
-import { TaskRunner, IssueBusyError } from '@issueforge/adapters';
+import { TaskRunner, IssueBusyError, type TaskDefinition } from '@issueforge/adapters';
 import type { AppContext } from '../context.js';
 
 /**
- * Runs a task and records what happened.
+ * Runs one task — reproduce or fix — and records what happened.
  *
  * Deliberately thin. IssueForge sets the run up — a pinned workspace, an issue lock,
  * a supervised process — and the harness does the work and reports its findings to the
@@ -49,8 +49,9 @@ export interface RunTaskOutput {
   detail: string;
 }
 
-export async function runReproduceTask(
+export async function runTask(
   context: AppContext,
+  task: TaskDefinition,
   options: RunTaskOptions,
 ): Promise<RunTaskOutput> {
   const runner = new TaskRunner({
@@ -60,7 +61,7 @@ export async function runReproduceTask(
     config: context.config,
     logger: context.logger,
     root: context.root,
-  });
+  }, task);
 
   try {
     const result = await runner.run({

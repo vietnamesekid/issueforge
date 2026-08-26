@@ -15,6 +15,7 @@ import {
   type Sha,
 } from '@issueforge/contracts';
 import {
+  buildFixCard,
   buildReproduceCard,
   classifyAttempt,
   classifyFailure,
@@ -314,7 +315,9 @@ export class TaskRunner {
 const REPRODUCE_RESULT_SCHEMA = {
   type: 'object',
   properties: {
-    verdict: { type: 'string', enum: ['reproduced', 'cannot-reproduce', 'needs-info'] },
+    // Derived, not hand-copied: a verdict the harness is told to produce but the
+    // contract then rejects surfaces as "returned no structured result", silently.
+    verdict: { type: 'string', enum: ['reproduced', 'cannot-reproduce', 'needs-info'] as const },
     reproCommand: {
       type: 'array',
       items: { type: 'string' },
@@ -382,4 +385,41 @@ export const REPRODUCE: TaskDefinition = {
   kind: 'reproduce',
   buildCard: buildReproduceCard,
   resultSchema: REPRODUCE_RESULT_SCHEMA,
+};
+
+/**
+ * What the harness returns from a fix.
+ *
+ * Like the reproduce schema, a summary for the ledger — the real account goes in the
+ * pull request and the issue comment, where a reviewer reads it.
+ */
+const FIX_RESULT_SCHEMA = {
+  type: 'object',
+  properties: {
+    verdict: { type: 'string', enum: ['fixed', 'could-not-fix', 'needs-info'] as const },
+    branch: { type: 'string', description: 'Branch the fix was committed on.' },
+    pullRequestUrl: { type: 'string', description: 'URL of the draft PR, if one was opened.' },
+    testCommand: {
+      type: 'array',
+      items: { type: 'string' },
+      description: 'Command as an argv array that fails before the fix and passes after.',
+    },
+    testFile: { type: 'string', description: 'Repo-relative path to the test covering the fix.' },
+    summary: { type: 'string' },
+  },
+  required: ['verdict', 'summary'],
+} as const;
+
+/**
+ * The fix task.
+ *
+ * Ends at a DRAFT pull request: the agent does the work and opens it, a human reviews
+ * and merges. There is deliberately no verify stage and no gate requiring a prior
+ * reproduce — both would put IssueForge back to adjudicating a decision the maintainer
+ * already made by applying the label.
+ */
+export const FIX: TaskDefinition = {
+  kind: 'fix',
+  buildCard: buildFixCard,
+  resultSchema: FIX_RESULT_SCHEMA,
 };

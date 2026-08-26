@@ -63,15 +63,25 @@ export const IssueKey = z.object({
 });
 
 /**
- * The outcome of a reproduction attempt.
+ * What a harness concluded, across every task kind.
  *
- * Deliberately shared between what the harness CLAIMS and what IssueForge CONCLUDES
- * after replaying the evidence. They must range over the same values or the two
- * cannot be compared — and comparing them is the entire product: a claim of
- * `reproduced` that independent replay downgrades to `cannot-reproduce` is the case
- * the whole design exists to catch.
+ * One enum rather than one per task, because `classifyAttempt` writes a verdict
+ * straight into a run's `status` and the ledger has to be able to hold it. A contracts
+ * test asserts `Verdict ⊆ RunStatus` for exactly that reason.
+ *
+ * `needs-info` is shared: "I could not tell from this issue" is a real conclusion
+ * whether the task was to reproduce a bug or to fix one.
  */
-export const Verdict = z.enum(['reproduced', 'cannot-reproduce', 'needs-info']);
+export const Verdict = z.enum([
+  // reproduce
+  'reproduced',
+  'cannot-reproduce',
+  // fix
+  'fixed',
+  'could-not-fix',
+  // either
+  'needs-info',
+]);
 
 /** Lifecycle state of a run. */
 export const RunStatus = z.enum([
@@ -79,6 +89,8 @@ export const RunStatus = z.enum([
   'running',
   'reproduced',
   'cannot-reproduce',
+  'fixed',
+  'could-not-fix',
   'needs-info',
   'interrupted',
   'blocked',
