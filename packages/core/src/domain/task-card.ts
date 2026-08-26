@@ -1,4 +1,4 @@
-import type { IssueForgeConfig, Sha, TaskCard } from '@issueforge/contracts';
+import type { IssueForgeConfig, RepoSlug, Sha, TaskCard } from '@issueforge/contracts';
 import { TaskCard as TaskCardSchema } from '@issueforge/contracts';
 import { ALWAYS_FORBIDDEN } from './write-boundary.js';
 
@@ -21,7 +21,7 @@ import { ALWAYS_FORBIDDEN } from './write-boundary.js';
 
 export interface TaskCardInput {
   issue: { number: number; title: string; body: string };
-  repo: string;
+  repo: RepoSlug;
   baseSha: Sha;
   config: Pick<IssueForgeConfig, 'harness' | 'policy'>;
 }

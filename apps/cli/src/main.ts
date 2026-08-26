@@ -1,7 +1,7 @@
 import { execFileSync } from 'node:child_process';
 import { Command } from 'commander';
 import type { RunId, RunStatus, Sha } from '@issueforge/contracts';
-import { Sha as ShaSchema, Verdict } from '@issueforge/contracts';
+import { RepoSlug, Sha as ShaSchema, Verdict } from '@issueforge/contracts';
 import { reapOrphans } from '@issueforge/adapters';
 import { createContext } from './context.js';
 import { NotOurLabelError, parseEventFile } from './commands/handle-github-event.js';
@@ -76,7 +76,7 @@ export function buildProgram(): Command {
 
       const context = createContext();
       const result = await runReproduceTask(context, {
-        repo: event.repo,
+        repo: RepoSlug.parse(event.repo),
         issueNumber: event.issueNumber,
         issue: event.issue,
         remote: `https://github.com/${event.repo}.git`,
@@ -127,11 +127,19 @@ export function buildProgram(): Command {
         const remote = options.remote ?? `https://github.com/${options.repo}.git`;
 
         const result = await runReproduceTask(context, {
-          repo: options.repo,
+          // Straight from argv, so parsed here rather than trusted. A bad slug now
+          // fails at the boundary with a readable message instead of part-way through
+          // a run that has already taken the issue lock.
+          repo: RepoSlug.parse(options.repo),
           issueNumber: options.issue,
           issue: { number: options.issue, title: options.title, body: options.body },
           remote,
-          baseSha: (options.baseSha ?? resolveBaseSha(options.repo, 'HEAD')),
+          // `??` would hand through an unvalidated argv string; a supplied SHA has to
+          // be parsed, a resolved one is already branded.
+          baseSha:
+            options.baseSha === undefined
+              ? resolveBaseSha(options.repo, 'HEAD')
+              : ShaSchema.parse(options.baseSha),
           ...(options.publish && process.env['ISSUEFORGE_GITHUB_TOKEN'] !== undefined
             ? { githubToken: process.env['ISSUEFORGE_GITHUB_TOKEN'] }
             : {}),
@@ -267,7 +275,7 @@ export function buildProgram(): Command {
  * A non-zero exit is reserved for IssueForge itself failing.
  */
 function report(
-  result: { runId: RunId; status: RunStatus; detail: string },
+  result: { runId: RunId | undefined; status: RunStatus; detail: string },
   json: boolean,
 ): void {
   if (json) emit(result);

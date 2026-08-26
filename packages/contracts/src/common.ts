@@ -7,18 +7,36 @@ import { z } from 'zod';
  * which `erasableSyntaxOnly` bans (and which would break the build-free dev loop).
  */
 
+/**
+ * Identifiers that must not be interchangeable.
+ *
+ * Branded, so the compiler can tell them apart. Before this they were plain `string`
+ * aliases: a `RunId` could be passed where a `Sha` was expected and nothing complained,
+ * and the `as Sha` casts written to look like validated boundaries were no-ops — the
+ * type checker treated them as `as string`, and typed lint flagged all four as
+ * unnecessary.
+ *
+ * The cost is that a branded value can only be produced by `.parse()`. That is the
+ * point: it forces validation exactly where untrusted text enters.
+ */
+
 /** A full 40-character git object id. Runs pin an exact commit, never a ref. */
 export const Sha = z
   .string()
-  .regex(/^[0-9a-f]{40}$/, 'expected a full 40-character git SHA');
+  .regex(/^[0-9a-f]{40}$/, 'expected a full 40-character git SHA')
+  .brand<'Sha'>();
 
 /** Identifier for one local run, e.g. `run_a1b2c3`. */
-export const RunId = z.string().regex(/^run_[0-9a-z]{6,}$/, 'expected a run id like "run_a1b2c3"');
+export const RunId = z
+  .string()
+  .regex(/^run_[0-9a-z]{6,}$/, 'expected a run id like "run_a1b2c3"')
+  .brand<'RunId'>();
 
 /** `owner/repo`, as GitHub spells it. */
 export const RepoSlug = z
   .string()
-  .regex(/^[\w.-]+\/[\w.-]+$/, 'expected "owner/repo"');
+  .regex(/^[\w.-]+\/[\w.-]+$/, 'expected "owner/repo"')
+  .brand<'RepoSlug'>();
 
 /**
  * A command as an ARGV ARRAY — never a shell string.

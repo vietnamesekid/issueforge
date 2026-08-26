@@ -4,6 +4,7 @@ import { mkdtempSync, rmSync, writeFileSync, chmodSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { RunState } from '@issueforge/contracts';
+import { repoSlug, runId, sha } from '@issueforge/contracts';
 import type { RunStore } from '@issueforge/core';
 import { SqliteRunStore } from '../state/index.js';
 import { currentProcessIdentity, isGroupAlive, reapOrphans, spawnSupervised } from './index.js';
@@ -25,12 +26,12 @@ afterEach(() => {
 
 function makeRun(overrides: Partial<RunState> = {}): RunState {
   return {
-    id: 'run_a1b2c3',
-    repo: 'owner/repo',
+    id: runId(),
+    repo: repoSlug(),
     issueNumber: 7,
     task: 'reproduce',
     status: 'running',
-    baseSha: 'a'.repeat(40),
+    baseSha: sha(),
     createdAt: 1_000,
     updatedAt: 1_000,
     ...overrides,
@@ -142,7 +143,7 @@ describe('reapOrphans', { timeout: 20_000 }, () => {
     await expectNoSleepers(tag);
 
     // The row is cleared and marked, so the next invocation does not reconsider it.
-    const run = store.getRun('run_a1b2c3');
+    const run = store.getRun(runId());
     expect(run?.ownership).toBeUndefined();
     expect(run?.status).toBe('interrupted');
     expect(store.listReapCandidates()).toHaveLength(0);
@@ -189,7 +190,7 @@ describe('reapOrphans', { timeout: 20_000 }, () => {
     );
 
     expect(reapOrphans(store)).toHaveLength(0);
-    expect(store.getRun('run_a1b2c3')?.ownership).toBeUndefined();
+    expect(store.getRun(runId())?.ownership).toBeUndefined();
     expect(store.listReapCandidates()).toHaveLength(0);
   });
 

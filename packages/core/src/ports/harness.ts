@@ -58,6 +58,15 @@ export interface HarnessRunRequest {
    * human reviews everything it writes. Absent for a local run with no GitHub side.
    */
   githubToken?: string;
+  /**
+   * Environment variables the harness may inherit, by name.
+   *
+   * An allowlist: a naively spawned child inherits everything (82 variables on the
+   * machine this was measured on). Passed from config so a repository can widen it for
+   * a toolchain that needs another variable — without this the configured list was
+   * never applied and `env.allow` silently did nothing.
+   */
+  envAllow?: readonly string[];
   signal?: AbortSignal;
 }
 

@@ -70,6 +70,7 @@ export class ClaudeCodeAdapter implements HarnessAdapter {
       // authentication this product is built to reuse. Naming it explicitly is what
       // makes it an allowed exception to the environment allowlist.
       env: {
+        ...optionalDefined('allow', request.envAllow),
         extra: {
           ...optionalDefined('ANTHROPIC_API_KEY', process.env['ANTHROPIC_API_KEY']),
           // The harness reports its own findings, so it needs to reach GitHub. This is

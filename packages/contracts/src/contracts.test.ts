@@ -151,8 +151,12 @@ describe('RunState', () => {
 describe('IssueForgeConfig', () => {
   it('an empty config is valid and safe by default', () => {
     const cfg = IssueForgeConfig.parse({});
-    expect(cfg.harness.trustRepoConfig).toBe(false); // isolated by default
     expect(cfg.policy.draftPrOnly).toBe(true);
+    // Budget and turn limits must have real values: they are the only bound on what a
+    // run can spend, and a missing config must not mean "unlimited".
+    expect(cfg.harness.maxBudgetUsd).toBeGreaterThan(0);
+    expect(cfg.harness.maxTurns).toBeGreaterThan(0);
+    expect(cfg.harness.timeoutMs).toBeGreaterThan(0);
     expect(cfg.policy.forbiddenPaths).toContain('.github/**');
     expect(cfg.env.allow).toContain('PATH');
     // an allowlist, not a denylist, and small enough to audit at a glance

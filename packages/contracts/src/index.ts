@@ -9,3 +9,5 @@ export * from './run.js';
 export * from './config.js';
 export * from './github.js';
 export * from './optional.js';
+// Branded-id constructors for tests; see testing.ts for why they live here.
+export * from './testing.js';

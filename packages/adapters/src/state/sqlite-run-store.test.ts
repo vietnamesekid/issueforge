@@ -3,6 +3,7 @@ import { existsSync, mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { RunState } from '@issueforge/contracts';
+import { repoSlug, runId, sha } from '@issueforge/contracts';
 import { spawn } from 'node:child_process';
 import { SqliteRunStore } from './sqlite-run-store.js';
 
@@ -21,12 +22,12 @@ if (!hasBuild) {
 }
 import { SCHEMA_VERSION } from './migrations.js';
 
-const SHA = 'a'.repeat(40);
+const SHA = sha();
 
 function makeRun(overrides: Partial<RunState> = {}): RunState {
   return {
-    id: 'run_a1b2c3',
-    repo: 'owner/repo',
+    id: runId(),
+    repo: repoSlug(),
     issueNumber: 7,
     task: 'reproduce',
     status: 'queued',
@@ -58,21 +59,23 @@ describe('migrations', () => {
     store.migrate();
     store.migrate();
     store.createRun(makeRun());
-    expect(store.getRun('run_a1b2c3')).not.toBeNull();
+    expect(store.getRun(runId('a1b2c3'))).not.toBeNull();
   });
 
   it('bring a fresh database to the current schema version', () => {
     const second = new SqliteRunStore(join(dir, 'other.db'));
     second.migrate();
-    second.createRun(makeRun({ id: 'run_zzz999' }));
-    expect(second.getRun('run_zzz999')?.repo).toBe('owner/repo');
+    second.createRun(makeRun({ id: runId('zzz999') }));
+    expect(second.getRun(runId('zzz999'))?.repo).toBe(repoSlug());
     second.close();
     expect(SCHEMA_VERSION).toBeGreaterThan(0);
   });
 
   it('creates the parent directory rather than failing on a fresh machine', () => {
     // dbPath is under a directory that did not exist; construction must handle it.
-    expect(store.getRun('nope')).toBeNull();
+    // A well-formed id for a run that was never created — the store returns null for
+    // absence, and a malformed id could never reach it now that RunId is branded.
+    expect(store.getRun(runId('nosuch'))).toBeNull();
   });
 });
 
@@ -85,9 +88,9 @@ describe('run lifecycle', () => {
 
   it('applies partial updates without clobbering untouched fields', () => {
     store.createRun(makeRun({ workdir: '/tmp/wt' }));
-    store.updateRun('run_a1b2c3', { status: 'running', harness: 'claude-code' });
+    store.updateRun(runId('a1b2c3'), { status: 'running', harness: 'claude-code' });
 
-    const run = store.getRun('run_a1b2c3');
+    const run = store.getRun(runId('a1b2c3'));
     expect(run?.status).toBe('running');
     expect(run?.harness).toBe('claude-code');
     expect(run?.workdir).toBe('/tmp/wt'); // untouched
@@ -95,11 +98,11 @@ describe('run lifecycle', () => {
   });
 
   it('filters by repo, issue and status', () => {
-    store.createRun(makeRun({ id: 'run_aaa111', status: 'running' }));
-    store.createRun(makeRun({ id: 'run_bbb222', status: 'reproduced', issueNumber: 8 }));
-    store.createRun(makeRun({ id: 'run_ccc333', status: 'cancelled', repo: 'other/repo' }));
+    store.createRun(makeRun({ id: runId('aaa111'), status: 'running' }));
+    store.createRun(makeRun({ id: runId('bbb222'), status: 'reproduced', issueNumber: 8 }));
+    store.createRun(makeRun({ id: runId('ccc333'), status: 'cancelled', repo: repoSlug('other/repo') }));
 
-    expect(store.listRuns({ repo: 'owner/repo' })).toHaveLength(2);
+    expect(store.listRuns({ repo: repoSlug() })).toHaveLength(2);
     expect(store.listRuns({ issueNumber: 8 })).toHaveLength(1);
     expect(store.listRuns({ status: ['running', 'reproduced'] })).toHaveLength(2);
     expect(store.listRuns({ limit: 1 })).toHaveLength(1);
@@ -111,12 +114,12 @@ describe('durability — the database is the source of truth, not the process', 
     // Simulates the cancellation path: transition written, then the process dies
     // with no chance to clean up. Reopening must find the recorded state.
     store.createRun(makeRun({ status: 'running' }));
-    store.updateRun('run_a1b2c3', { status: 'interrupted', detail: 'SIGINT' });
+    store.updateRun(runId('a1b2c3'), { status: 'interrupted', detail: 'SIGINT' });
     store.close(); // stands in for the process ceasing to exist
 
     const reopened = new SqliteRunStore(dbPath);
     reopened.migrate(); // every start migrates; must not disturb existing data
-    const run = reopened.getRun('run_a1b2c3');
+    const run = reopened.getRun(runId('a1b2c3'));
     expect(run?.status).toBe('interrupted');
     expect(run?.detail).toBe('SIGINT');
     reopened.close();
@@ -178,13 +181,13 @@ describe('durability — the database is the source of truth, not the process', 
     // The CLI and the listener service both open this file.
     const other = new SqliteRunStore(dbPath);
     try {
-      store.createRun(makeRun({ id: 'run_aaa111' }));
-      expect(other.getRun('run_aaa111')).not.toBeNull();
+      store.createRun(makeRun({ id: runId('aaa111') }));
+      expect(other.getRun(runId('aaa111'))).not.toBeNull();
 
-      other.createRun(makeRun({ id: 'run_bbb222' }));
-      store.updateRun('run_bbb222', { status: 'running' });
+      other.createRun(makeRun({ id: runId('bbb222') }));
+      store.updateRun(runId('bbb222'), { status: 'running' });
 
-      expect(store.getRun('run_bbb222')?.status).toBe('running');
+      expect(store.getRun(runId('bbb222'))?.status).toBe('running');
       expect(other.listRuns()).toHaveLength(2);
     } finally {
       other.close();
@@ -194,29 +197,29 @@ describe('durability — the database is the source of truth, not the process', 
 
 describe('issue locks', () => {
   beforeEach(() => {
-    store.createRun(makeRun({ id: 'run_aaa111' }));
-    store.createRun(makeRun({ id: 'run_bbb222' }));
+    store.createRun(makeRun({ id: runId('aaa111') }));
+    store.createRun(makeRun({ id: runId('bbb222') }));
   });
 
   it('grants the lock once and refuses a second holder for the same issue', () => {
-    const first = store.tryAcquireLock({ repo: 'owner/repo', issueNumber: 7, runId: 'run_aaa111', acquiredAt: 1 });
-    const second = store.tryAcquireLock({ repo: 'owner/repo', issueNumber: 7, runId: 'run_bbb222', acquiredAt: 2 });
+    const first = store.tryAcquireLock({ repo: repoSlug(), issueNumber: 7, runId: runId('aaa111'), acquiredAt: 1 });
+    const second = store.tryAcquireLock({ repo: repoSlug(), issueNumber: 7, runId: runId('bbb222'), acquiredAt: 2 });
 
     expect(first).toBe(true);
     expect(second).toBe(false); // mutual exclusion comes from the PRIMARY KEY, not a read-then-write
-    expect(store.getLock({ repo: 'owner/repo', issueNumber: 7 })?.runId).toBe('run_aaa111');
+    expect(store.getLock({ repo: repoSlug(), issueNumber: 7 })?.runId).toBe(runId('aaa111'));
   });
 
   it('allows concurrent runs on different issues', () => {
-    expect(store.tryAcquireLock({ repo: 'owner/repo', issueNumber: 7, runId: 'run_aaa111', acquiredAt: 1 })).toBe(true);
-    expect(store.tryAcquireLock({ repo: 'owner/repo', issueNumber: 9, runId: 'run_bbb222', acquiredAt: 1 })).toBe(true);
+    expect(store.tryAcquireLock({ repo: repoSlug(), issueNumber: 7, runId: runId('aaa111'), acquiredAt: 1 })).toBe(true);
+    expect(store.tryAcquireLock({ repo: repoSlug(), issueNumber: 9, runId: runId('bbb222'), acquiredAt: 1 })).toBe(true);
   });
 
   it('releases so a later run can take the issue', () => {
-    store.tryAcquireLock({ repo: 'owner/repo', issueNumber: 7, runId: 'run_aaa111', acquiredAt: 1 });
-    store.releaseLock({ repo: 'owner/repo', issueNumber: 7 });
-    expect(store.getLock({ repo: 'owner/repo', issueNumber: 7 })).toBeNull();
-    expect(store.tryAcquireLock({ repo: 'owner/repo', issueNumber: 7, runId: 'run_bbb222', acquiredAt: 3 })).toBe(true);
+    store.tryAcquireLock({ repo: repoSlug(), issueNumber: 7, runId: runId('aaa111'), acquiredAt: 1 });
+    store.releaseLock({ repo: repoSlug(), issueNumber: 7 });
+    expect(store.getLock({ repo: repoSlug(), issueNumber: 7 })).toBeNull();
+    expect(store.tryAcquireLock({ repo: repoSlug(), issueNumber: 7, runId: runId('bbb222'), acquiredAt: 3 })).toBe(true);
   });
 });
 
@@ -244,10 +247,10 @@ describe('process ownership and reaping', () => {
     store.createRun(makeRun({ status: 'running', ownership }));
     expect(store.listReapCandidates()).toHaveLength(1);
 
-    store.updateRun('run_a1b2c3', { ownership: null, status: 'reproduced' });
+    store.updateRun(runId('a1b2c3'), { ownership: null, status: 'reproduced' });
 
     expect(store.listReapCandidates()).toHaveLength(0);
-    expect(store.getRun('run_a1b2c3')?.ownership).toBeUndefined();
+    expect(store.getRun(runId('a1b2c3'))?.ownership).toBeUndefined();
   });
 
   it('a run that never spawned anything is not a reap candidate', () => {
@@ -263,13 +266,13 @@ describe('task attempts', () => {
     // `runs` holds only the CURRENT state. Without per-attempt rows, retrying an
     // issue would overwrite the record of why the previous attempt failed — which is
     // exactly what a maintainer needs to see before retrying again.
-    store.startAttempt({ runId: 'run_a1b2c3', attempt: 1, harness: 'claude-code', startedAt: 10 });
-    store.finishAttempt('run_a1b2c3', { outcome: 'timeout', exitCode: 143, endedAt: 20 });
+    store.startAttempt({ runId: runId('a1b2c3'), attempt: 1, harness: 'claude-code', startedAt: 10 });
+    store.finishAttempt(runId('a1b2c3'), { outcome: 'timeout', exitCode: 143, endedAt: 20 });
 
-    store.startAttempt({ runId: 'run_a1b2c3', attempt: 2, harness: 'claude-code', startedAt: 30 });
-    store.finishAttempt('run_a1b2c3', { outcome: 'completed', exitCode: 0, costUsd: 0.42, endedAt: 40 });
+    store.startAttempt({ runId: runId('a1b2c3'), attempt: 2, harness: 'claude-code', startedAt: 30 });
+    store.finishAttempt(runId('a1b2c3'), { outcome: 'completed', exitCode: 0, costUsd: 0.42, endedAt: 40 });
 
-    const attempts = store.listAttempts('run_a1b2c3');
+    const attempts = store.listAttempts(runId('a1b2c3'));
     expect(attempts.map((a) => a.attempt)).toEqual([1, 2]);
     expect(attempts[0]?.outcome).toBe('timeout');   // first failure still legible
     expect(attempts[0]?.exitCode).toBe(143);
@@ -278,12 +281,12 @@ describe('task attempts', () => {
   });
 
   it('finishAttempt closes the latest attempt, not an earlier one', () => {
-    store.startAttempt({ runId: 'run_a1b2c3', attempt: 1, startedAt: 10 });
-    store.finishAttempt('run_a1b2c3', { outcome: 'error', endedAt: 20 });
-    store.startAttempt({ runId: 'run_a1b2c3', attempt: 2, startedAt: 30 });
-    store.finishAttempt('run_a1b2c3', { outcome: 'cancelled', endedAt: 40 });
+    store.startAttempt({ runId: runId('a1b2c3'), attempt: 1, startedAt: 10 });
+    store.finishAttempt(runId('a1b2c3'), { outcome: 'error', endedAt: 20 });
+    store.startAttempt({ runId: runId('a1b2c3'), attempt: 2, startedAt: 30 });
+    store.finishAttempt(runId('a1b2c3'), { outcome: 'cancelled', endedAt: 40 });
 
-    const [first, second] = store.listAttempts('run_a1b2c3');
+    const [first, second] = store.listAttempts(runId('a1b2c3'));
     expect(first?.outcome).toBe('error');       // untouched by the second finish
     expect(second?.outcome).toBe('cancelled');
   });
@@ -291,21 +294,21 @@ describe('task attempts', () => {
   it('rejects a duplicate attempt number for the same run', () => {
     // A unique index, not a check in code: two supervisors racing the same retry
     // must not both claim attempt 2.
-    store.startAttempt({ runId: 'run_a1b2c3', attempt: 1, startedAt: 10 });
-    expect(() => store.startAttempt({ runId: 'run_a1b2c3', attempt: 1, startedAt: 11 })).toThrow();
+    store.startAttempt({ runId: runId('a1b2c3'), attempt: 1, startedAt: 10 });
+    expect(() => store.startAttempt({ runId: runId('a1b2c3'), attempt: 1, startedAt: 11 })).toThrow();
   });
 
   it('leaves an in-flight attempt open until it is finished', () => {
     // A supervisor killed mid-run cannot close its own row, so an attempt with no
     // outcome is the signal that something ended abruptly.
-    store.startAttempt({ runId: 'run_a1b2c3', attempt: 1, startedAt: 10 });
-    const [open] = store.listAttempts('run_a1b2c3');
+    store.startAttempt({ runId: runId('a1b2c3'), attempt: 1, startedAt: 10 });
+    const [open] = store.listAttempts(runId('a1b2c3'));
     expect(open?.outcome).toBeUndefined();
     expect(open?.endedAt).toBeUndefined();
   });
 
   it('rejects an attempt for a run that does not exist', () => {
-    expect(() => store.startAttempt({ runId: 'run_ghost1', attempt: 1, startedAt: 1 })).toThrow();
+    expect(() => store.startAttempt({ runId: runId('ghost1'), attempt: 1, startedAt: 1 })).toThrow();
   });
 });
 
@@ -313,10 +316,10 @@ describe('artifacts', () => {
   beforeEach(() => store.createRun(makeRun()));
 
   it('records and lists artifacts in creation order', () => {
-    store.recordArtifact({ runId: 'run_a1b2c3', path: 'a.patch', kind: 'patch', createdAt: 1, bytes: 10 });
-    store.recordArtifact({ runId: 'run_a1b2c3', path: 'events.jsonl', kind: 'events', createdAt: 2 });
+    store.recordArtifact({ runId: runId('a1b2c3'), path: 'a.patch', kind: 'patch', createdAt: 1, bytes: 10 });
+    store.recordArtifact({ runId: runId('a1b2c3'), path: 'events.jsonl', kind: 'events', createdAt: 2 });
 
-    const list = store.listArtifacts('run_a1b2c3');
+    const list = store.listArtifacts(runId('a1b2c3'));
     expect(list.map((a) => a.kind)).toEqual(['patch', 'events']);
     expect(list[0]?.bytes).toBe(10);
     expect(list[1]?.bytes).toBeUndefined(); // absent, not null
@@ -326,7 +329,7 @@ describe('artifacts', () => {
     // Foreign keys are ON, so a dangling artifact cannot be created. Retention
     // (IF-018) relies on ON DELETE CASCADE to clean these up with their run.
     expect(() =>
-      store.recordArtifact({ runId: 'run_ghost1', path: 'x', kind: 'other', createdAt: 1 }),
+      store.recordArtifact({ runId: runId('ghost1'), path: 'x', kind: 'other', createdAt: 1 }),
     ).toThrow();
   });
 });

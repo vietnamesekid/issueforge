@@ -9,8 +9,9 @@ import type {
   HarnessRunOutcome,
   IssueForgeConfig,
   ProcessOwnership,
+  Sha,
 } from '@issueforge/contracts';
-import { IssueForgeConfig as ConfigSchema } from '@issueforge/contracts';
+import { IssueForgeConfig as ConfigSchema, repoSlug, runId, sha } from '@issueforge/contracts';
 import {
   HarnessContractError,
   HarnessRunError,
@@ -25,10 +26,10 @@ import { ReproduceRunner, IssueBusyError } from './reproduce-runner.js';
 let dir: string;
 let origin: string;
 let root: string;
-let baseSha: string;
+let baseSha: Sha;
 let store: SqliteRunStore;
 
-const REPO = 'owner/repo';
+const REPO = repoSlug();
 const config: IssueForgeConfig = ConfigSchema.parse({});
 const logger = createLogger({ level: 'fatal' });
 
@@ -43,13 +44,15 @@ class FakeHarness implements HarnessAdapter {
   outcome: HarnessRunOutcome | undefined;
   failure: Error | undefined;
   observedCwd: string | undefined;
+  observedEnvAllow: readonly string[] | undefined;
 
   async detect(): Promise<HarnessCapabilities> {
     return { installed: true, version: 'fake', authenticated: true };
   }
 
-  run(request: { cwd: string }): HarnessRun {
+  run(request: { cwd: string; envAllow?: readonly string[] }): HarnessRun {
     this.observedCwd = request.cwd;
+    this.observedEnvAllow = request.envAllow;
     const events = this.events;
     const outcome = this.outcome;
     const failure = this.failure;
@@ -89,7 +92,7 @@ beforeEach(() => {
   writeFileSync(join(origin, 'a.txt'), 'v1\n');
   git(['add', '-A'], origin);
   git(['commit', '-qm', 'base'], origin);
-  baseSha = git(['rev-parse', 'HEAD'], origin);
+  baseSha = sha(git(['rev-parse', 'HEAD'], origin));
 
   store = new SqliteRunStore(join(root, 'state.db'));
   store.migrate();
@@ -222,7 +225,7 @@ describe('ReproduceRunner', { timeout: 30_000 }, () => {
 
   it('refuses to start when another run holds the issue', async () => {
     store.createRun({
-      id: 'run_holder01',
+      id: runId('holder01'),
       repo: REPO,
       issueNumber: 7,
       task: 'reproduce',
@@ -231,11 +234,11 @@ describe('ReproduceRunner', { timeout: 30_000 }, () => {
       createdAt: 1,
       updatedAt: 1,
     });
-    store.tryAcquireLock({ repo: REPO, issueNumber: 7, runId: 'run_holder01', acquiredAt: 1 });
+    store.tryAcquireLock({ repo: REPO, issueNumber: 7, runId: runId('holder01'), acquiredAt: 1 });
 
     await expect(runner.run(request())).rejects.toThrow(IssueBusyError);
     // The pre-existing holder keeps the lock.
-    expect(store.getLock({ repo: REPO, issueNumber: 7 })?.runId).toBe('run_holder01');
+    expect(store.getLock({ repo: REPO, issueNumber: 7 })?.runId).toBe(runId('holder01'));
   });
 
   it('treats a contract breach as blocked, not as a finding about the bug', async () => {
@@ -247,6 +250,14 @@ describe('ReproduceRunner', { timeout: 30_000 }, () => {
     expect(result.status).toBe('blocked');
     expect(result.detail).toMatch(/MCP servers/);
     expect(store.listAttempts(result.runId)[0]?.outcome).toBe('error');
+  });
+
+  it('passes the configured environment allowlist to the harness', async () => {
+    // `env.allow` used to be inert: the only function that read it had no callers, so
+    // a repository could configure the list and the spawn silently ignored it.
+    await runner.run(request());
+
+    expect(harness.observedEnvAllow).toEqual(config.env.allow);
   });
 
   it('records a TIMEOUT as a timeout, not as a completed attempt', async () => {
@@ -309,7 +320,7 @@ describe('ReproduceRunner', { timeout: 30_000 }, () => {
 
   it('reaps an orphan left by an earlier run before starting', async () => {
     store.createRun({
-      id: 'run_orphan01',
+      id: runId('orphan01'),
       repo: REPO,
       issueNumber: 99,
       task: 'reproduce',

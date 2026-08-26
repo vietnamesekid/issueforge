@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { IssueForgeConfig } from '@issueforge/contracts';
+import { IssueForgeConfig, repoSlug, sha } from '@issueforge/contracts';
 import { buildReproduceCard } from './task-card.js';
 import { ALWAYS_FORBIDDEN } from './write-boundary.js';
 
@@ -8,8 +8,8 @@ const config = IssueForgeConfig.parse({});
 function card(overrides: Partial<Parameters<typeof buildReproduceCard>[0]> = {}) {
   return buildReproduceCard({
     issue: { number: 1, title: 'a bug', body: 'it breaks' },
-    repo: 'owner/repo',
-    baseSha: 'a'.repeat(40),
+    repo: repoSlug(),
+    baseSha: sha(),
     config,
     ...overrides,
   });

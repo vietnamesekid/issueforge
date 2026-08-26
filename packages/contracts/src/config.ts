@@ -14,15 +14,6 @@ export const IssueForgeConfig = z.object({
   harness: z
     .object({
       preferred: HarnessName.default('claude-code'),
-      /**
-       * Opt out of isolation and reuse the developer's interactive login.
-       *
-       * Default false, which means `--bare`: repository hooks and `.mcp.json` are not
-       * executed. That is a deliberate trade-off — under `--bare` authentication is
-       * strictly ANTHROPIC_API_KEY, because OAuth and keychain are never read.
-       * Only enable for repositories you trust to run their own config.
-       */
-      trustRepoConfig: z.boolean().default(false),
       maxBudgetUsd: z.number().positive().default(2),
       maxTurns: z.number().int().positive().default(30),
       timeoutMs: z.number().int().positive().default(1_800_000),
@@ -30,6 +21,11 @@ export const IssueForgeConfig = z.object({
     .prefault({}),
   policy: z
     .object({
+      /**
+       * Reserved. The reproduce card sets `['**']` unconditionally: which files the
+       * work needs is the harness's decision, and the control that matters is
+       * `forbiddenPaths`, which is enforced by the post-run audit.
+       */
       allowedPaths: z.array(z.string().min(1)).default(['**']),
       /** Always blocked in addition to whatever is configured here. */
       forbiddenPaths: z

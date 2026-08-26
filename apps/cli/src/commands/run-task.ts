@@ -1,4 +1,10 @@
-import { optionalDefined, type RunId, type RunStatus, type Sha } from '@issueforge/contracts';
+import {
+  optionalDefined,
+  type RepoSlug,
+  type RunId,
+  type RunStatus,
+  type Sha,
+} from '@issueforge/contracts';
 import { ReproduceRunner, IssueBusyError } from '@issueforge/adapters';
 import type { AppContext } from '../context.js';
 
@@ -16,7 +22,7 @@ import type { AppContext } from '../context.js';
  */
 
 export interface RunTaskOptions {
-  repo: string;
+  repo: RepoSlug;
   issueNumber: number;
   issue: { number: number; title: string; body: string };
   remote: string;
@@ -26,7 +32,12 @@ export interface RunTaskOptions {
 }
 
 export interface RunTaskOutput {
-  runId: RunId;
+  /**
+   * The run this reports on. Absent when no run was created — declining a busy issue
+   * is an outcome, not a run, and inventing an id for it would put a row-shaped hole
+   * in anything reading this.
+   */
+  runId: RunId | undefined;
   /**
    * The run's final status.
    *
@@ -67,7 +78,7 @@ export async function runReproduceTask(
       // Not a failure: another run holds this issue, and declining is correct rather
       // than racing it.
       context.logger.warn({ issue: options.issueNumber }, error.message);
-      return { runId: '', status: 'blocked', detail: error.message };
+      return { runId: undefined, status: 'blocked', detail: error.message };
     }
     throw error;
   }

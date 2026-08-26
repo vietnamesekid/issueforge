@@ -5,7 +5,13 @@ import type {
   RunState,
   TaskAttempt,
 } from '@issueforge/contracts';
-import { RunState as RunStateSchema, optional } from '@issueforge/contracts';
+import {
+  ArtifactRecord as ArtifactRecordSchema,
+  IssueLock as IssueLockSchema,
+  RunState as RunStateSchema,
+  TaskAttempt as TaskAttemptSchema,
+  optional,
+} from '@issueforge/contracts';
 
 /**
  * The boundary between SQL rows and domain types.
@@ -98,35 +104,35 @@ export function toRunState(row: RunRow): RunState {
 }
 
 export function toIssueLock(row: LockRow): IssueLock {
-  return {
+  return IssueLockSchema.parse({
     repo: row.repo,
     issueNumber: row.issue_number,
     runId: row.run_id,
     acquiredAt: row.acquired_at,
-  };
+  });
 }
 
 export function toTaskAttempt(row: TaskRow): TaskAttempt {
-  return {
+  return TaskAttemptSchema.parse({
     runId: row.run_id,
     attempt: row.attempt,
     startedAt: row.started_at,
-    ...optional('harness', row.harness as TaskAttempt['harness'] | null),
+    ...optional('harness', row.harness),
     ...optional('pgid', row.pgid),
     ...optional('exitCode', row.exit_code),
-    ...optional('outcome', row.outcome as TaskAttempt['outcome'] | null),
+    ...optional('outcome', row.outcome),
     ...optional('costUsd', row.cost_usd),
     ...optional('endedAt', row.ended_at),
-  };
+  });
 }
 
 export function toArtifactRecord(row: ArtifactRow): ArtifactRecord {
-  return {
+  return ArtifactRecordSchema.parse({
     runId: row.run_id,
     path: row.path,
-    kind: row.kind as ArtifactRecord['kind'],
+    kind: row.kind,
     createdAt: row.created_at,
     ...optional('checksum', row.checksum),
     ...optional('bytes', row.bytes),
-  };
+  });
 }

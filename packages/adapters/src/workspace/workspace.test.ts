@@ -3,6 +3,8 @@ import { execFileSync } from 'node:child_process';
 import { existsSync, mkdtempSync, rmSync, writeFileSync, readdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import type { RepoSlug, Sha } from '@issueforge/contracts';
+import { repoSlug, sha } from '@issueforge/contracts';
 import { WorkspaceError } from '@issueforge/core';
 import { GitWorkspaceManager } from './workspace-manager.js';
 import { repoDirName, workspacePath, mirrorPath } from './layout.js';
@@ -10,10 +12,10 @@ import { repoDirName, workspacePath, mirrorPath } from './layout.js';
 let dir: string;
 let origin: string;
 let root: string;
-let baseSha: string;
+let baseSha: Sha;
 let manager: GitWorkspaceManager;
 
-const REPO = 'owner/repo';
+const REPO = repoSlug();
 
 function run(args: string[], cwd: string): string {
   return execFileSync('git', args, { cwd, encoding: 'utf8' }).trim();
@@ -38,7 +40,7 @@ beforeEach(() => {
   dir = mkdtempSync(join(tmpdir(), 'if-ws-'));
   origin = join(dir, 'origin');
   root = join(dir, 'home');
-  baseSha = buildOrigin(origin);
+  baseSha = sha(buildOrigin(origin));
   manager = new GitWorkspaceManager(root);
 });
 
@@ -57,9 +59,11 @@ describe('layout', () => {
   it('flattens a repo slug into a directory name that cannot escape the root', () => {
     // Slugs arrive in webhook payloads, so traversal must be impossible rather than
     // merely unlikely.
-    expect(repoDirName('owner/repo')).toBe('owner__repo');
-    expect(repoDirName('../../etc/passwd')).not.toContain('..');
-    expect(repoDirName('a/../../b')).not.toContain('..');
+    expect(repoDirName(repoSlug())).toBe('owner__repo');
+    // These two cannot come from `repoSlug()`: the whole point is that they are NOT
+    // valid slugs, and `RepoSlug.parse` would reject them before `repoDirName` saw them.
+    expect(repoDirName('../../etc/passwd' as RepoSlug)).not.toContain('..');
+    expect(repoDirName('a/../../b' as RepoSlug)).not.toContain('..');
   });
 
   it('puts each task under its issue', () => {

@@ -5,7 +5,9 @@ import type {
   IssueForgeConfig} from '@issueforge/contracts';
 import {
   optionalDefined,
+  RunId as RunIdSchema,
   type HarnessRunOutcome,
+  type RepoSlug,
   type RunId,
   type RunState,
   type Sha,
@@ -48,7 +50,7 @@ export interface ReproduceRunnerDeps {
 }
 
 export interface ReproduceRequest {
-  repo: string;
+  repo: RepoSlug;
   issueNumber: number;
   issue: { number: number; title: string; body: string };
   remote: string;
@@ -71,9 +73,19 @@ export interface ReproduceResult {
 
 /** The issue is already being worked on by another run on this machine. */
 export class IssueBusyError extends Error {
-  constructor(issueNumber: number, holder: RunId) {
-    super(`issue #${issueNumber} is already held by run ${holder}`);
+  readonly issueNumber: number;
+  /** The run holding the lock, when the row could still be read. */
+  readonly holder: RunId | undefined;
+
+  constructor(issueNumber: number, holder: RunId | undefined) {
+    super(
+      holder === undefined
+        ? `issue #${issueNumber} is already held by another run`
+        : `issue #${issueNumber} is already held by run ${holder}`,
+    );
     this.name = 'IssueBusyError';
+    this.issueNumber = issueNumber;
+    this.holder = holder;
   }
 }
 
@@ -122,7 +134,7 @@ export class ReproduceRunner {
     })) {
       const holder = store.getLock({ repo: request.repo, issueNumber: request.issueNumber });
       store.updateRun(runId, { status: 'blocked', detail: 'another run holds this issue' });
-      throw new IssueBusyError(request.issueNumber, holder?.runId ?? ('unknown'));
+      throw new IssueBusyError(request.issueNumber, holder?.runId);
     }
 
     let workspace: Workspace | undefined;
@@ -186,6 +198,7 @@ export class ReproduceRunner {
       taskCardPath,
       resultSchema: REPRODUCE_RESULT_SCHEMA,
       sessionId: randomUUID(),
+      envAllow: config.env.allow,
       ...optionalDefined('githubToken', request.githubToken),
     });
 
@@ -301,7 +314,9 @@ const REPRODUCE_RESULT_SCHEMA = {
 } as const;
 
 function newRunId(): RunId {
-  return `run_${randomUUID().replace(/-/g, '').slice(0, 10)}`;
+  // Parsed rather than asserted: this is the one place run ids are minted, so it is
+  // where the format is guaranteed rather than merely intended.
+  return RunIdSchema.parse(`run_${randomUUID().replace(/-/g, '').slice(0, 10)}`);
 }
 
 function nextAttempt(store: RunStore, runId: RunId): number {

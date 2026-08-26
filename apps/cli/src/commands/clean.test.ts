@@ -3,6 +3,7 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { RunState, RunStatus } from '@issueforge/contracts';
+import { repoSlug, runId, sha } from '@issueforge/contracts';
 import { SqliteRunStore } from '@issueforge/adapters';
 import type { AppContext } from '../context.js';
 import { planClean } from './clean.js';
@@ -27,12 +28,12 @@ const NOW = 1_800_000_000_000;
 function record(id: string, status: RunStatus, ageDays: number): void {
   const at = NOW - ageDays * DAY;
   const run: RunState = {
-    id: `run_${id}`,
-    repo: 'owner/repo',
+    id: runId(id),
+    repo: repoSlug(),
     issueNumber: 1,
     task: 'reproduce',
     status,
-    baseSha: 'a'.repeat(40),
+    baseSha: sha(),
     harness: 'claude-code',
     createdAt: at,
     updatedAt: at,
