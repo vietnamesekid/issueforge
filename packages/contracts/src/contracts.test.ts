@@ -159,7 +159,9 @@ describe('RunState', () => {
 describe('IssueForgeConfig', () => {
   it('an empty config is valid and safe by default', () => {
     const cfg = IssueForgeConfig.parse({});
-    expect(cfg.policy.draftPrOnly).toBe(true);
+    // Defaults to the FULL ladder: a tool that silently refused to fix would be more
+    // confusing than one that does. Stopping early is opt-in.
+    expect(cfg.policy.stopAfter).toBe('fix');
     // Turn and time limits must have real values: they are the only bound on how far
     // a run can go, and a missing config must not mean "unlimited".
     expect(cfg.harness.maxTurns).toBeGreaterThan(0);

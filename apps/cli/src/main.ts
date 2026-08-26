@@ -17,6 +17,7 @@ import {
 } from './commands/listener.js';
 import { executeClean, planClean, renderCleanPlan } from './commands/clean.js';
 import { cancelRuns, renderCancelled } from './commands/cancel.js';
+import { declinedReason, taskIsPermitted } from './commands/policy.js';
 
 /**
  * Composition root and argv parsing.
@@ -100,6 +101,16 @@ export function buildProgram(): Command {
       }
 
       const context = createContext();
+
+      if (!taskIsPermitted(task.kind, context.config)) {
+        // A policy stop, not a failure: the maintainer asked for something this
+        // repository has switched off, and saying so is more useful than silence.
+        const reason = declinedReason(task.kind, context.config);
+        if (options.json === true) emit({ skipped: true, task: task.kind, reason });
+        else process.stderr.write(`${reason}\n`);
+        return;
+      }
+
       const result = await runTask(context, task, {
         repo: RepoSlug.parse(event.repo),
         issueNumber: event.issueNumber,
@@ -150,6 +161,12 @@ export function buildProgram(): Command {
         }
 
         const context = createContext();
+
+        if (!taskIsPermitted(definition.kind, context.config)) {
+          fail(declinedReason(definition.kind, context.config));
+          return;
+        }
+
         const remote = options.remote ?? `https://github.com/${options.repo}.git`;
 
         const result = await runTask(context, definition, {

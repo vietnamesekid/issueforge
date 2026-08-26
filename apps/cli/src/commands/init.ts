@@ -113,7 +113,8 @@ const CONFIG = `{
     "timeoutMs": 1800000
   },
   "policy": {
-    "forbiddenPaths": [".github/**", ".git/**", "**/.env", "**/*.pem", "**/id_rsa*"]
+    "forbiddenPaths": [".github/**", ".git/**", "**/.env", "**/*.pem", "**/id_rsa*"],
+    "stopAfter": "fix"
   },
   "retention": { "days": 14 }
 }
@@ -195,6 +196,9 @@ export function renderInit(results: readonly InitResult[]): string {
     'To stop a run already in flight: issueforge cancel --issue <n>',
     'The "issueforge:cancel" label does the same, but needs a SECOND runner — one',
     'runner has one slot, so the cancel job would queue behind the run it must stop.',
+    '',
+    'To let agents investigate but never change code, set policy.stopAfter to',
+    '"reproduce" in .issueforge/config.json. The default, "fix", allows both.',
     '',
     'Use a private repository. A self-hosted runner executes on your machine, and',
     'anyone can write the issue text an agent will read.',

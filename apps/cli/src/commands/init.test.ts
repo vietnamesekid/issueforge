@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { mkdtempSync, readFileSync, rmSync, writeFileSync, mkdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { IssueForgeConfig } from '@issueforge/contracts';
 import { renderInit, runInit } from './init.js';
 
 let dir: string;
@@ -12,6 +13,17 @@ const workflow = (): string =>
   readFileSync(join(dir, '.github', 'workflows', 'issueforge.yml'), 'utf8');
 
 describe('init', () => {
+  it('generates a config the loader actually accepts', () => {
+    // Caught for real: an escaped quote inside the template literal produced invalid
+    // JSON, so `init` wrote a config that every later command rejected. The template is
+    // a string in a .ts file, which means nothing typechecks its contents.
+    runInit(dir);
+    const raw = readFileSync(join(dir, '.issueforge', 'config.json'), 'utf8');
+
+    expect(() => JSON.parse(raw) as unknown).not.toThrow();
+    expect(() => IssueForgeConfig.parse(JSON.parse(raw))).not.toThrow();
+  });
+
   it('writes both files a repository needs', () => {
     const results = runInit(dir);
     expect(results.every((r) => r.written)).toBe(true);

@@ -30,8 +30,18 @@ export const IssueForgeConfig = z.object({
       forbiddenPaths: z
         .array(z.string().min(1))
         .default(['.github/**', '.git/**', '**/.env', '**/*.pem', '**/id_rsa*']),
-      /** Draft PRs only; human review and merge stay mandatory. */
-      draftPrOnly: z.literal(true).default(true),
+      /**
+       * How far a run may go on this repository.
+       *
+       * `reproduce` — investigate and report, never change code. `fix` — also attempt a
+       * fix and open a DRAFT pull request; review and merge stay human either way.
+       *
+       * Modelled on Sentry Seer's "Automated Run Stopping Point", which defaults to
+       * stopping before code generation. Triage output is useful on its own, and a
+       * repository should be able to say "not on this one" without uninstalling
+       * anything or trusting everyone with write access to avoid a label.
+       */
+      stopAfter: z.enum(['reproduce', 'fix']).default('fix'),
     })
     .prefault({}),
   retention: z.object({ days: z.number().int().positive().default(14) }).prefault({}),
