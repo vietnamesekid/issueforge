@@ -34,15 +34,34 @@ permissions:
   contents: read
 
 jobs:
-  release:
+  # vercel/ai filters this workflow with `paths: ['.changeset/**']` so it only wakes
+  # for a release. That key belongs to `push` and is unavailable on `workflow_run`,
+  # so the equivalent lives here — a cheap checkout that decides whether the real job
+  # runs at all, instead of installing a toolchain to discover there is no work.
+  pending:
     runs-on: ubuntu-latest
-    # Never run in a fork: it has no npm identity, and the failure would be noise for
-    # a contributor who cannot fix it. And never release off a red CI run — the
-    # manual dispatch path has no upstream run to inspect, so it is allowed through.
     if: >-
       github.repository == 'vietnamesekid/issueforge'
       && (github.event_name == 'workflow_dispatch'
           || github.event.workflow_run.conclusion == 'success')
+    outputs:
+      found: ${{ steps.check.outputs.found }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.ref }}
+      - id: check
+        # In prerelease mode a changeset that has already been versioned STAYS on
+        # disk and is recorded in pre.json instead, so counting *.md files reports
+        # pending work forever — verified against this repo, where the one consumed
+        # changeset made a naive count say "true" while `changeset status` said there
+        # was nothing to bump. Only files absent from pre.json count.
+        run: node scripts/pending-changesets.mjs >> "$GITHUB_OUTPUT"
+
+  release:
+    needs: pending
+    if: needs.pending.outputs.found == 'true'
+    runs-on: ubuntu-latest
     permissions:
       # OIDC trusted publishing and the provenance attestation. Without id-token the
       # publish still succeeds but ships NO attestation, and that is invisible until

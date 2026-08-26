@@ -122,6 +122,17 @@ describe('release workflow', () => {
     expect(ciRelease.indexOf('pnpm build')).toBeLessThan(ciRelease.indexOf('publish.mjs'));
   });
 
+  it('does not count a consumed changeset as pending work', () => {
+    // The bug this test exists for: in prerelease mode `changeset version` leaves the
+    // applied file on disk and records it in pre.json, so counting .changeset/*.md
+    // reports pending work forever. Observed here — one consumed changeset made a
+    // naive count say "true" while `changeset status` said there was nothing to bump,
+    // which would wake the release job on every push it was meant to skip.
+    const gate = readFileSync(join(ROOT, 'scripts/pending-changesets.mjs'), 'utf8');
+    expect(gate).toMatch(/pre\.json/);
+    expect(gate).toMatch(/applied\.has/);
+  });
+
   it('only releases a commit whose CI went green', () => {
     // The gate is no longer a step inside this workflow — it is CI, which this run
     // is chained to. That is only safe if the conclusion is actually checked: a
