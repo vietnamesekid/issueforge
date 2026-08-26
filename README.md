@@ -14,10 +14,9 @@ the boundaries, the bookkeeping and the cleanup.
 > IssueForge supplies the automation.
 > **You supply the judgement.**
 
-**Status: pre-alpha, and now actually runs.** The reproduce task works end to end — a labelled
-issue on a private repository has been triaged by Claude Code start to finish, with the agent
-posting its own findings back to the issue. Not published to npm yet; expect rough edges. Fix and
-verify are next. See [Roadmap](#roadmap).
+**Status: pre-alpha.** Reproduce and fix run end to end against real issues on a private
+repository, with Claude Code. Not published to npm, Codex is not supported yet, and the
+architecture is still moving — expect rough edges. See [Roadmap](#roadmap).
 
 ---
 
@@ -109,12 +108,15 @@ A maintainer applies an intent label. That is the only way a run ever starts.
 | Intent label | Meaning | Status |
 | --- | --- | --- |
 | `issueforge:reproduce` | Triage the issue and report what you find | **Works today** |
-| `issueforge:fix` | Attempt a fix and open a draft PR | v0.2 — accepted, then skipped |
+| `issueforge:fix` | Attempt a fix and open a draft PR | **Works today** |
+| `issueforge:cancel` | Cancel a live run and clean up | **Works today** |
 | `issueforge:retry` | Retry the last failed or inconclusive task | Not wired up yet |
-| `issueforge:cancel` | Cancel a live run and clean up | Not wired up yet |
 
-The last three are recognised and then declined with a message on stderr, rather than failing
-silently. They are listed here because the labels exist, not because they do anything yet.
+`retry` is recognised and then declined with a message on stderr, rather than failing silently. It
+is listed here because the label exists, not because it does anything yet.
+
+The two tasks form a ladder — reproduce investigates, fix also changes code — and a repository can
+stop at the lower rung. See [`policy.stopAfter`](#limiting-how-far-a-run-may-go).
 
 **IssueForge writes no labels and posts no comments.** The agent reports its own findings with
 `gh`, because it knows what it did and writes a better account of it than a template can assemble
@@ -185,6 +187,20 @@ agent holding your credentials. That is a prompt-injection surface. Defaults:
 - Use a **private repository**, and a dedicated OS account or machine for anything public. A personal
   laptop is not a disposable sandbox.
 
+### Limiting how far a run may go
+
+Reproduce investigates and reports; fix also changes code and opens a draft PR. `policy.stopAfter`
+in `.issueforge/config.json` pins a repository to the lower rung:
+
+```json
+{ "policy": { "stopAfter": "reproduce" } }
+```
+
+The default is `"fix"` — the full ladder — because a tool that silently declined to fix would
+confuse more than it protects. Stopping early is opt-in, and is reported when it happens, naming
+the setting and the file. This is how you say "triage here, but never write code on this repo"
+without uninstalling anything or trusting everyone with write access to avoid a label.
+
 ### Two deliberate trade-offs
 
 Both of these were once claimed as protections here. They are not, and pretending otherwise would be
@@ -221,6 +237,8 @@ issueforge listener status
 issueforge listener uninstall
 
 issueforge run reproduce --issue 123 --repo owner/name   # run one locally
+issueforge run fix --issue 123 --repo owner/name         # fix it and open a draft PR
+issueforge cancel --issue 123                            # stop a run already in flight
 issueforge status                                        # what has run, and how it ended
 issueforge clean --older-than 14 --yes                   # remove old runs and worktrees
 ```
@@ -228,7 +246,8 @@ issueforge clean --older-than 14 --yes                   # remove old runs and w
 `issueforge handle github-event --event-path "$GITHUB_EVENT_PATH"` is what the generated workflow
 calls; you do not run it by hand.
 
-`run fix` is accepted by the parser and refused — the fix task is v0.2.
+`run fix` exits 1 if `policy.stopAfter` forbids it — you typed a command this repository declines.
+The label path exits 0 instead, because a policy stop is not a failed run.
 
 ### Getting started
 
@@ -246,17 +265,16 @@ shell's `PATH`, so a version-managed Node (nvm, fnm, asdf, volta) is invisible t
 
 - **Node.js ≥ 22.13** (Node 24 recommended — it is the current Active LTS)
 - **git** and the **GitHub CLI** (`gh`)
-- **Claude Code** and/or **Codex CLI**, installed and authenticated
+- **Claude Code**, installed and authenticated (Codex is planned, not yet supported)
 - A repository you can register a self-hosted runner on
 
 ---
 
-## Roadmap
+## What was measured, not assumed
 
-### What was proven before building *(complete)*
-
-Five assumptions were tested against real systems first, because a negative result would have
-changed the architecture rather than the code.
+Five assumptions were tested against real systems before any of this was built, because a negative
+result would have changed the architecture rather than the code. Each one still constrains the
+design, so they are recorded here rather than in a changelog.
 
 **Event delivery.** A label applied on GitHub reached a local process in about ten seconds, with no
 inbound port, no tunnel and no polling. The same run also uncovered a work-destroying bug in the
@@ -288,19 +306,16 @@ then failed three times out of three on live issues, rejecting correct work each
 deleted. The reasoning is in [The thesis](#the-thesis); it is listed here because "we tried it" is
 more useful than silence.
 
-### v0.1 — Local reproduce *(working)*
+## Roadmap
 
-- `init`, `doctor`, listener install/status/uninstall
-- GitHub labelled-event workflow template
-- Claude Code adapter (Codex next, as proof the abstraction is real)
-- Local worktrees, SQLite run ledger, out-of-band orphan reaping
-- Reproduce task: the agent triages and reports its own findings to the issue
+What works today is listed under [How it works](#how-it-works); what follows is what does not
+exist yet.
 
-### v0.2 — Fix to draft PR *(next)*
+### v0.2 — Verify *(next)*
 
-- The fix task: the agent fixes, commits to its own branch and opens a **draft** PR itself
-- `retry` and `cancel` wired up — today they are recognised and declined
 - Verify running in its own clone, so a later stage cannot read refs an earlier one wrote
+- `retry` wired up — today it is recognised and declined
+- Codex adapter, as proof the harness abstraction is real
 - Optional rootless-Docker sandbox wrapper
 
 ### v0.3 — Extensibility
