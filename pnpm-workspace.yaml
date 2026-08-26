@@ -7,4 +7,4 @@ packages:
 catalog:
   # Node globals (AbortSignal, process, Buffer) are not in `lib`; tsconfig.base.json
   # names this in `types`, so every package must resolve the same copy.
-  "@types/node": ^22.10.0
+  "@types/node": ^26.2.0
