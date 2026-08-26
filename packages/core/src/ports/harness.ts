@@ -91,3 +91,31 @@ export class HarnessContractError extends Error {
     this.name = 'HarnessContractError';
   }
 }
+
+/**
+ * Why a harness run ended without producing a result.
+ *
+ * `timeout` and `cancelled` are supervisor decisions — the wall clock or an operator
+ * ended the run. `crashed` is everything else.
+ */
+export type RunFailureReason = 'timeout' | 'cancelled' | 'crashed';
+
+/**
+ * The run ended early, and the supervisor knows why.
+ *
+ * Carries the reason as a value because the alternative was inferring it from prose:
+ * classification used to regex-match the error message for /timed out/ and /cancel/,
+ * which meant a harness error merely MENTIONING cancellation became `cancelled` — a
+ * terminal status that stops retry — while a reworded upstream timeout message would
+ * have silently become a crash. The supervisor already computes this precisely; this
+ * type is how it survives the trip to the ledger.
+ */
+export class HarnessRunError extends Error {
+  readonly reason: RunFailureReason;
+
+  constructor(reason: RunFailureReason, message: string) {
+    super(message);
+    this.name = 'HarnessRunError';
+    this.reason = reason;
+  }
+}

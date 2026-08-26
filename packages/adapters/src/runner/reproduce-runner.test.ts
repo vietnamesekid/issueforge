@@ -11,7 +11,12 @@ import type {
   ProcessOwnership,
 } from '@issueforge/contracts';
 import { IssueForgeConfig as ConfigSchema } from '@issueforge/contracts';
-import { HarnessContractError, type HarnessAdapter, type HarnessRun } from '@issueforge/core';
+import {
+  HarnessContractError,
+  HarnessRunError,
+  type HarnessAdapter,
+  type HarnessRun,
+} from '@issueforge/core';
 import { SqliteRunStore } from '../state/index.js';
 import { GitWorkspaceManager } from '../workspace/index.js';
 import { createLogger } from '../logger/index.js';
@@ -238,6 +243,38 @@ describe('ReproduceRunner', { timeout: 30_000 }, () => {
 
     expect(result.status).toBe('blocked');
     expect(result.detail).toMatch(/MCP servers/);
+    expect(store.listAttempts(result.runId)[0]?.outcome).toBe('error');
+  });
+
+  it('records a TIMEOUT as a timeout, not as a completed attempt', async () => {
+    // The `tasks` table exists so a retry adds history rather than overwriting why the
+    // previous attempt failed — and exhausting the time budget is the most common way
+    // an agent run fails. It was being recorded as `completed`: the status mapper had
+    // no branch that could ever produce 'timeout', so the ledger said the run finished
+    // normally.
+    harness.failure = new HarnessRunError('timeout', 'exceeded its 900000ms budget');
+    const result = await runner.run(request());
+
+    expect(result.status).toBe('needs-info');
+    expect(store.listAttempts(result.runId)[0]?.outcome).toBe('timeout');
+  });
+
+  it('records a CANCELLED run as cancelled', async () => {
+    harness.failure = new HarnessRunError('cancelled', 'run cancelled');
+    const result = await runner.run(request());
+
+    expect(result.status).toBe('cancelled');
+    expect(store.listAttempts(result.runId)[0]?.outcome).toBe('cancelled');
+  });
+
+  it('does not classify a crash as cancelled just because it says "cancel"', async () => {
+    // Classification used to regex-match the error message, so any harness error
+    // mentioning the word — a git error about a cancelled upstream, or the agent's own
+    // prose — became `cancelled`: a TERMINAL status that stops retry.
+    harness.failure = new Error('upstream build was cancelled by the provider');
+    const result = await runner.run(request());
+
+    expect(result.status).toBe('needs-info');
     expect(store.listAttempts(result.runId)[0]?.outcome).toBe('error');
   });
 

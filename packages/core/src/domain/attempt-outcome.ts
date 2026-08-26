@@ -1,4 +1,4 @@
-import type { HarnessRunOutcome, RunStatus } from '@issueforge/contracts';
+import type { HarnessRunOutcome, RunStatus, TaskOutcome } from '@issueforge/contracts';
 
 /**
  * How an attempt ended, in the ledger's vocabulary.
@@ -11,8 +11,18 @@ import type { HarnessRunOutcome, RunStatus } from '@issueforge/contracts';
  * tell a maintainer something false.
  */
 export interface AttemptClassification {
+  /** The run's lifecycle state, shown by `issueforge status`. */
   status: RunStatus;
   detail: string;
+  /**
+   * How this attempt ended, for the per-attempt ledger.
+   *
+   * Emitted here rather than re-derived from `status` by the caller. It used to be
+   * re-derived, by a mapper with no branch that could produce `timeout` — so every
+   * timed-out attempt was recorded as `completed`, and the most common way an agent
+   * run fails looked like success in the one table meant to explain retries.
+   */
+  outcome: TaskOutcome;
 }
 
 export interface AttemptFailure {
@@ -29,17 +39,26 @@ export interface AttemptFailure {
  */
 export function classifyAttempt(outcome: HarnessRunOutcome): AttemptClassification {
   if (!outcome.ok) {
-    return { status: 'needs-info', detail: 'the harness did not complete its task' };
+    return {
+      status: 'needs-info',
+      detail: 'the harness did not complete its task',
+      outcome: 'error',
+    };
   }
 
   if (outcome.result === undefined) {
-    return { status: 'needs-info', detail: 'the harness returned no structured result' };
+    return {
+      status: 'needs-info',
+      detail: 'the harness returned no structured result',
+      outcome: 'error',
+    };
   }
 
   // Verdict is a subset of RunStatus, asserted in the contracts test.
   return {
     status: outcome.result.verdict,
     detail: outcome.result.summary || `harness reported: ${outcome.result.verdict}`,
+    outcome: 'completed',
   };
 }
 
@@ -49,12 +68,16 @@ export function classifyFailure(failure: AttemptFailure): AttemptClassification 
     case 'contract':
       // The sandbox was not what was requested, so nothing the harness produced may
       // be interpreted. That is a policy stop, not a finding about the bug.
-      return { status: 'blocked', detail: failure.message };
+      return { status: 'blocked', detail: failure.message, outcome: 'error' };
     case 'timeout':
-      return { status: 'needs-info', detail: `the harness exceeded its time budget: ${failure.message}` };
+      return {
+        status: 'needs-info',
+        detail: `the harness exceeded its time budget: ${failure.message}`,
+        outcome: 'timeout',
+      };
     case 'cancelled':
-      return { status: 'cancelled', detail: failure.message };
+      return { status: 'cancelled', detail: failure.message, outcome: 'cancelled' };
     case 'crash':
-      return { status: 'needs-info', detail: failure.message };
+      return { status: 'needs-info', detail: failure.message, outcome: 'error' };
   }
 }

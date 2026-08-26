@@ -7,7 +7,13 @@ import {
   type HarnessEvent,
   type HarnessRunOutcome,
 } from '@issueforge/contracts';
-import { HarnessContractError, type HarnessAdapter, type HarnessRun, type HarnessRunRequest } from '@issueforge/core';
+import {
+  HarnessContractError,
+  HarnessRunError,
+  type HarnessAdapter,
+  type HarnessRun,
+  type HarnessRunRequest,
+} from '@issueforge/core';
 import { spawnSupervised, type SupervisedProcess } from '../../process/index.js';
 import { buildClaudeArgv } from './argv.js';
 import { parseLine, readClaim, type SessionPosture, type TerminalOutcome } from './events.js';
@@ -142,6 +148,17 @@ class ClaudeCodeRun implements HarnessRun {
 
     if (this.#postureError) {
       throw new HarnessContractError(this.#postureError);
+    }
+
+    // The supervisor knows whether the wall clock or an operator ended this run.
+    // Surfacing it as a typed error is what stops the runner inferring it from prose:
+    // a timed-out run otherwise reports as an ordinary failure and is filed in the
+    // ledger as `completed`.
+    if (result.reason === 'timeout') {
+      throw new HarnessRunError('timeout', 'the harness exceeded its time budget');
+    }
+    if (result.reason === 'cancelled') {
+      throw new HarnessRunError('cancelled', 'the run was cancelled');
     }
 
     const terminal = this.#terminal;

@@ -15,6 +15,7 @@ import {
   classifyAttempt,
   classifyFailure,
   HarnessContractError,
+  HarnessRunError,
   type AttemptFailure,
   type HarnessAdapter,
   type RunStore,
@@ -250,7 +251,10 @@ export class ReproduceRunner {
     const { store } = this.#deps;
 
     store.finishAttempt(runId, {
-      outcome: toTaskOutcome(classification.status),
+      // Taken from the classification, which knows why the attempt ended. Deriving it
+      // from `status` here meant `timeout` was unreachable and every timed-out attempt
+      // was filed as `completed`.
+      outcome: classification.outcome,
       endedAt: Date.now(),
       ...optionalDefined('exitCode', outcome?.exitCode),
       ...optionalDefined('costUsd', outcome?.costUsd),
@@ -304,18 +308,30 @@ function nextAttempt(store: RunStore, runId: RunId): number {
   return store.listAttempts(runId).length + 1;
 }
 
-function toTaskOutcome(status: RunState['status']): 'completed' | 'timeout' | 'cancelled' | 'error' {
-  if (status === 'cancelled') return 'cancelled';
-  if (status === 'blocked') return 'error';
-  return 'completed';
-}
-
+/**
+ * Turn a thrown error into a classified failure.
+ *
+ * Structured first: the supervisor already determined whether the run timed out or was
+ * cancelled, and `HarnessRunError` carries that as a value. This used to regex-match
+ * the message instead — so any harness error mentioning "cancel" became `cancelled`, a
+ * terminal status that stops retry, and a reworded upstream timeout string would have
+ * silently become a crash.
+ */
 function toFailure(error: unknown): AttemptFailure {
   if (error instanceof HarnessContractError) {
     return { kind: 'contract', message: error.message };
   }
-  const message = error instanceof Error ? error.message : String(error);
-  if (/timed? ?out/i.test(message)) return { kind: 'timeout', message };
-  if (/cancel/i.test(message)) return { kind: 'cancelled', message };
-  return { kind: 'crash', message };
+
+  if (error instanceof HarnessRunError) {
+    switch (error.reason) {
+      case 'timeout':
+        return { kind: 'timeout', message: error.message };
+      case 'cancelled':
+        return { kind: 'cancelled', message: error.message };
+      case 'crashed':
+        return { kind: 'crash', message: error.message };
+    }
+  }
+
+  return { kind: 'crash', message: error instanceof Error ? error.message : String(error) };
 }
