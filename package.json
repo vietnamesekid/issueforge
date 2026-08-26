@@ -20,7 +20,7 @@
     "test:coverage": "vitest run --coverage",
     "changeset": "changeset",
     "ci:version": "changeset version && pnpm install --no-frozen-lockfile",
-    "ci:release": "pnpm build && changeset publish"
+    "ci:release": "pnpm build && node scripts/publish.mjs"
   },
   "devDependencies": {
     "@changesets/cli": "^2.31.1",

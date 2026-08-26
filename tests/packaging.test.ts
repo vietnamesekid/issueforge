@@ -119,7 +119,7 @@ describe('release workflow', () => {
     // and then cannot run at all. `ci:release` now builds explicitly.
     const ciRelease = scripts['ci:release'] ?? '';
     expect(ciRelease).toMatch(/pnpm build/);
-    expect(ciRelease.indexOf('pnpm build')).toBeLessThan(ciRelease.indexOf('changeset publish'));
+    expect(ciRelease.indexOf('pnpm build')).toBeLessThan(ciRelease.indexOf('publish.mjs'));
   });
 
   it('only releases a commit whose CI went green', () => {
@@ -144,11 +144,29 @@ describe('release workflow', () => {
     expect(scripts['check']).toMatch(/publint/);
   });
 
+  it('derives the dist-tag from the version, never from changesets', () => {
+    // The bug this test exists for: `changeset publish` in prerelease mode publishes
+    // to the prerelease tag "except for packages that have not had normal releases,
+    // which will be published to latest" — its own warning, observed on a real run.
+    // 0.1.0-alpha.3 landed on `latest` while `alpha` stayed on alpha.2: the exact
+    // inversion prerelease mode exists to prevent, on a bare `npm i -g issueforge`.
+    // publishConfig.tag does not override it, so publishing goes through a script
+    // that passes --tag explicitly.
+    expect(scripts['ci:release']).toMatch(/scripts\/publish\.mjs/);
+    expect(scripts['ci:release'], 'changeset publish picks the wrong tag here').not.toMatch(
+      /changeset publish/,
+    );
+
+    const publish = readFileSync(join(ROOT, 'scripts/publish.mjs'), 'utf8');
+    expect(publish).toMatch(/'--tag', tag/);
+  });
+
   it('publishes with a provenance attestation', () => {
     // Provenance needs `id-token: write`; without it the publish still succeeds but
     // silently ships no attestation, invisible until someone opens the package page.
     expect(release).toMatch(/id-token:\s*write/);
-    expect(release).toMatch(/NPM_CONFIG_PROVENANCE/);
+    const publish = readFileSync(join(ROOT, 'scripts/publish.mjs'), 'utf8');
+    expect(publish).toMatch(/--provenance/);
   });
 
   it('never publishes from a fork', () => {
