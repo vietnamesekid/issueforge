@@ -87,3 +87,36 @@ export type IssueLock = z.infer<typeof IssueLock>;
 export type ArtifactRecord = z.infer<typeof ArtifactRecord>;
 export type TaskAttempt = z.infer<typeof TaskAttempt>;
 export type TaskOutcome = z.infer<typeof TaskOutcome>;
+
+/**
+ * The observable stages of a run, in the order they occur.
+ *
+ * These are the transitions `TaskRunner` ALREADY makes; naming them is what lets the
+ * CLI show progress during the minutes a run takes, instead of printing nothing until
+ * it finishes. Deliberately coarse: this is IssueForge reporting on its own supervision
+ * — setting a workspace up, spawning, auditing — and never the agent's reasoning. The
+ * harness reports its findings to the issue, which is the design.
+ *
+ * A phase is not a status. `RunStatus` is what the ledger records and what a retry
+ * would resume from; a phase is transient and nothing branches on it.
+ */
+export const RunPhase = z.enum([
+  'reaping',
+  'locking',
+  'cloning',
+  'preparing',
+  'spawning',
+  'working',
+  'auditing',
+  'finishing',
+]);
+
+/** A phase starting, with a human-readable line for the terminal. */
+export const RunPhaseEvent = z.object({
+  phase: RunPhase,
+  detail: z.string().optional(),
+  at: z.number().int().nonnegative(),
+});
+
+export type RunPhase = z.infer<typeof RunPhase>;
+export type RunPhaseEvent = z.infer<typeof RunPhaseEvent>;

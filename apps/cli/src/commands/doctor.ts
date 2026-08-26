@@ -1,6 +1,8 @@
 import { execFileSync } from 'node:child_process';
 import { accessSync, constants, mkdirSync } from 'node:fs';
 import { defaultRoot } from '@issueforge/adapters';
+import { displayWidth, oneLine, padTo } from '../ui/terminal-text.js';
+import { createTheme, type Theme } from '../ui/theme.js';
 
 /**
  * Reports why IssueForge will not work here, before anyone tries a run.
@@ -42,20 +44,42 @@ export function runDoctor(): CheckResult[] {
   ];
 }
 
-export function renderDoctor(results: readonly CheckResult[]): string {
-  const symbol = { ok: '✓', warn: '!', blocked: '✗' } as const;
+/** Symbol and colour role per level, both total so a new level fails to compile. */
+const SYMBOL: Record<CheckLevel, string> = { ok: '✓', warn: '!', blocked: '✗' };
+const ROLE: Record<CheckLevel, 'success' | 'warning' | 'danger'> = {
+  ok: 'success',
+  warn: 'warning',
+  blocked: 'danger',
+};
+
+export function renderDoctor(
+  results: readonly CheckResult[],
+  options: { theme?: Theme } = {},
+): string {
+  const theme = options.theme ?? createTheme();
+
+  // Sized from the longest name present rather than a constant, so adding a check with
+  // a longer name does not silently unalign the column.
+  const nameWidth = results.reduce((max, r) => Math.max(max, displayWidth(r.name)), 0);
 
   const lines = results.map((result) => {
-    const head = `${symbol[result.level]} ${result.name.padEnd(16)} ${result.detail}`;
-    return result.fix === undefined ? head : `${head}\n    → ${result.fix}`;
+    const mark = theme[ROLE[result.level]](SYMBOL[result.level]);
+    // `detail` carries output from an external tool — a version string, a path — so it
+    // is flattened to one line as well as sanitised. Each result is one row.
+    const head = `${mark} ${padTo(theme.bold(result.name), nameWidth)}  ${oneLine(result.detail)}`;
+    return result.fix === undefined
+      ? head
+      : `${head}\n  ${theme.dim('→')} ${theme.code(result.fix)}`;
   });
 
   const blocked = results.filter((r) => r.level === 'blocked').length;
   lines.push(
     '',
     blocked === 0
-      ? 'Ready. Try: issueforge run reproduce --repo owner/repo --issue 1'
-      : `${blocked} blocking problem${blocked === 1 ? '' : 's'} — IssueForge will not run until they are fixed.`,
+      ? `${theme.success('Ready.')} Try: ${theme.code('issueforge run reproduce --repo owner/repo --issue 1')}`
+      : theme.danger(
+          `${blocked} blocking problem${blocked === 1 ? '' : 's'} — IssueForge will not run until they are fixed.`,
+        ),
   );
 
   return lines.join('\n');

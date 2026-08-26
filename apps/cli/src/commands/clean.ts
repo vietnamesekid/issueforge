@@ -3,6 +3,8 @@ import { join } from 'node:path';
 import type { RunId, RunStatus } from '@issueforge/contracts';
 import { isTerminal } from '@issueforge/core';
 import { reapOrphans, runsRoot } from '@issueforge/adapters';
+import { displayWidth, padTo } from '../ui/terminal-text.js';
+import { createTheme, styleStatus, type Theme } from '../ui/theme.js';
 import type { AppContext } from '../context.js';
 
 /**
@@ -60,20 +62,29 @@ export function executeClean(context: AppContext, targets: readonly CleanTarget[
   }
 }
 
-export function renderCleanPlan(targets: readonly CleanTarget[], dryRun: boolean): string {
-  if (targets.length === 0) return 'Nothing to clean.';
+export function renderCleanPlan(
+  targets: readonly CleanTarget[],
+  dryRun: boolean,
+  options: { theme?: Theme } = {},
+): string {
+  const theme = options.theme ?? createTheme();
+  if (targets.length === 0) return theme.dim('Nothing to clean.');
+
+  const idWidth = targets.reduce((max, t) => Math.max(max, displayWidth(t.runId)), 0);
 
   const lines = targets.map(
     (target) =>
-      `${target.runId}  ${target.status.padEnd(17)} ${target.ageDays}d\n` +
-      target.paths.map((path) => `    ${path} (${sizeOf(path)})`).join('\n'),
+      `${padTo(theme.dim(target.runId), idWidth)}  ${styleStatus(theme, target.status)}  ${theme.dim(`${target.ageDays}d`)}\n` +
+      target.paths.map((path) => `    ${path} ${theme.dim(`(${sizeOf(path)})`)}`).join('\n'),
   );
 
+  const count = `${targets.length} run${targets.length === 1 ? '' : 's'}`;
   lines.push(
     '',
     dryRun
-      ? `${targets.length} run(s) would be removed. Re-run with --yes to delete.`
-      : `${targets.length} run(s) removed.`,
+      ? // This deletes evidence, so the confirmation is the loud part.
+        `${theme.warning(`${count} would be removed.`)} Re-run with ${theme.code('--yes')} to delete.`
+      : theme.success(`${count} removed.`),
   );
 
   return lines.join('\n');

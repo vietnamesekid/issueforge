@@ -7,6 +7,7 @@
  * see them.
  */
 import { describe, it, expect } from 'vitest';
+import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
@@ -288,5 +289,67 @@ describe('version', () => {
 
   it('is no longer the 0.0.0 placeholder', () => {
     expect(manifest['version']).not.toBe('0.0.0');
+  });
+});
+
+/**
+ * Colour must never reach a stream that is not a terminal.
+ *
+ * Runs the BUILT binary with stdout captured — which is exactly what a redirect, a
+ * pipe, and a CI log all look like. The source-level theme tests cannot see this
+ * class of bug: they pass an explicit `color` and so never exercise detection.
+ *
+ * The bug this exists for: `--no-color` is a Commander `--no-x` flag, which defaults
+ * to `color: true` when ABSENT. That `true` was forwarded as an explicit instruction,
+ * so detection never ran and `issueforge doctor > out.txt` filled the file with escape
+ * sequences.
+ */
+describe('colour detection in the built binary', () => {
+  const cli = join(ROOT, 'apps/cli/dist/main.js');
+  const ESC = String.fromCharCode(0x1b);
+
+  /**
+   * A clean environment: no inherited FORCE_COLOR, NO_COLOR or CI from the runner.
+   *
+   * Built by filtering rather than deleting, so CI — which sets `CI=true` itself —
+   * cannot make these assertions vacuously true.
+   */
+  const cleanEnv = (over: Record<string, string> = {}): NodeJS.ProcessEnv =>
+    Object.fromEntries([
+      ...Object.entries(process.env).filter(
+        ([key]) => !['FORCE_COLOR', 'NO_COLOR', 'CI'].includes(key),
+      ),
+      ...Object.entries(over),
+    ]);
+
+  const run = (args: readonly string[], env: NodeJS.ProcessEnv): string =>
+    execFileSync('node', [cli, ...args], { encoding: 'utf8', env, stdio: ['ignore', 'pipe', 'pipe'] });
+
+  it('emits NO escape sequences when stdout is captured', () => {
+    expect(run(['doctor'], cleanEnv())).not.toContain(ESC);
+  });
+
+  it('emits none in CI either', () => {
+    expect(run(['doctor'], cleanEnv({ CI: 'true' }))).not.toContain(ESC);
+  });
+
+  it('emits none under NO_COLOR', () => {
+    expect(run(['doctor'], cleanEnv({ NO_COLOR: '1' }))).not.toContain(ESC);
+  });
+
+  it('still colours when FORCE_COLOR asks for it', () => {
+    // The counterpart: detection must not be so eager that the override stops working.
+    expect(run(['doctor'], cleanEnv({ FORCE_COLOR: '1' }))).toContain(ESC);
+  });
+
+  it('honours --no-color over FORCE_COLOR', () => {
+    expect(run(['--no-color', 'doctor'], cleanEnv({ FORCE_COLOR: '1' }))).not.toContain(ESC);
+  });
+
+  it('keeps --json free of decoration', () => {
+    // stdout is the machine channel; a single escape byte makes it unparseable.
+    const out = run(['status', '--json'], cleanEnv({ FORCE_COLOR: '1' }));
+    expect(out).not.toContain(ESC);
+    expect(() => JSON.parse(out) as unknown).not.toThrow();
   });
 });
