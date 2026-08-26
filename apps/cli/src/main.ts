@@ -34,7 +34,7 @@ import { declinedReason, taskIsPermitted } from './commands/policy.js';
 // Kept in step with apps/cli/package.json by tests/packaging.test.ts: a release
 // that bumped only the manifest would ship a binary reporting the old number,
 // so the version a user pastes into a bug report would be the wrong one.
-const VERSION = '0.1.0-alpha.1';
+const VERSION = '0.1.0-alpha.2';
 
 /**
  * Exit codes, so a workflow step can branch on the outcome.
