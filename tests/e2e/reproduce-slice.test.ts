@@ -11,7 +11,7 @@ import type {
   ProcessOwnership,
   Sha,
 } from '@issueforge/contracts';
-import { IssueForgeConfig as ConfigSchema } from '@issueforge/contracts';
+import { IssueForgeConfig as ConfigSchema, sha } from '@issueforge/contracts';
 import { HarnessContractError, type HarnessAdapter, type HarnessRun } from '@issueforge/core';
 import {
   GitWorkspaceManager,
@@ -110,7 +110,7 @@ beforeEach(() => {
   dir = mkdtempSync(join(tmpdir(), 'if-e2e-'));
   origin = join(dir, 'origin');
   root = join(dir, 'home');
-  baseSha = buildOrigin(origin) as Sha;
+  baseSha = sha(buildOrigin(origin));
 
   store = new SqliteRunStore(join(root, 'state.db'));
   store.migrate();

@@ -62,6 +62,9 @@ describe('layout', () => {
     expect(repoDirName(repoSlug())).toBe('owner__repo');
     // These two cannot come from `repoSlug()`: the whole point is that they are NOT
     // valid slugs, and `RepoSlug.parse` would reject them before `repoDirName` saw them.
+    // Cast deliberately: these are NOT valid slugs, which is the point. Branding has
+    // made this path unreachable in production — `repoDirName` can only be handed a
+    // parsed slug now — so the test documents a defence the type system also closes.
     expect(repoDirName('../../etc/passwd' as RepoSlug)).not.toContain('..');
     expect(repoDirName('a/../../b' as RepoSlug)).not.toContain('..');
   });
