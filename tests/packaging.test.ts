@@ -38,6 +38,19 @@ describe('published manifest', () => {
     expect(files).toContain('LICENSE');
   });
 
+  it('publishes to npmjs, using the registry API host', () => {
+    // Two ways to get this wrong, both of which publish somewhere nobody installs
+    // from: the package's WEB url (npmjs.com/package/...), which is not an API
+    // endpoint at all, and npm.pkg.github.com, which is GitHub Packages — a
+    // different registry that also requires a scoped name and does not accept the
+    // npmjs OIDC trusted publisher this repo is set up with.
+    const config = (manifest['publishConfig'] ?? {}) as Record<string, string>;
+    const registry = config['registry'];
+    if (registry !== undefined) {
+      expect(registry).toMatch(/^https:\/\/registry\.npmjs\.org\/?$/);
+    }
+  });
+
   it('declares a bin path npm will not strip', () => {
     // The bug this test exists for: `"issueforge": "./dist/main.js"` is REMOVED by npm
     // at publish time ("bin[issueforge] script name was invalid and removed"), so the
