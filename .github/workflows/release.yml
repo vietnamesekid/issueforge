@@ -47,7 +47,7 @@ jobs:
     outputs:
       found: ${{ steps.check.outputs.found }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.ref }}
       - id: check
@@ -71,7 +71,7 @@ jobs:
       contents: write
       pull-requests: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           # changesets needs history to work out what changed since the last tag.
           fetch-depth: 0
