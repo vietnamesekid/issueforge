@@ -103,6 +103,17 @@ describe('buildReproduceCard', () => {
       expect(brief()).toMatch(/--remove-label issueforge:reproduce/);
     });
 
+    it('gives the comment a fixed structure, so every issue reads the same', () => {
+      // Vercel's bot writes the same headings on every issue — verified identical across
+      // four sampled PRs. Consistency is what lets a maintainer scan a timeline instead
+      // of reading each report from scratch.
+      const b = brief();
+      expect(b).toMatch(/## What I observed/);
+      expect(b).toMatch(/## Reproduce it yourself/);
+      expect(b).toMatch(/## What still works/);
+      expect(b).toMatch(/REAL output/);
+    });
+
     it('does not invent labels that do not exist', () => {
       expect(brief()).toMatch(/if one does not, say so rather than creating it/i);
     });
@@ -171,6 +182,27 @@ describe('buildFixCard', () => {
 
   it('keeps the untrusted-input warning first', () => {
     expect(fixCard().instructions.split('\n')[0]).toMatch(/UNTRUSTED/);
+  });
+
+  it('names the six PR headings, in order', () => {
+    // Modelled on what Vercel's bot actually ships — verified byte-identical across four
+    // sampled PRs — with End-to-end Validation swapped for Review Focus, since review is
+    // the measured bottleneck. Six is also the upper bound the PR-template literature
+    // gives before reviewers start skimming.
+    const headings = [...fixCard().instructions.matchAll(/^ {2}## (.+)$/gm)].map((m) => m[1]);
+    expect(headings).toEqual([
+      'Background',
+      'Root Cause',
+      'Summary',
+      'Testing',
+      'Review Focus',
+      'Related Issues',
+    ]);
+  });
+
+  it('asks for before/after output, not just a passing run', () => {
+    expect(fixCard().instructions).toMatch(/BEFORE the change and AFTER/);
+    expect(fixCard().instructions).toMatch(/passing run on its own proves nothing/);
   });
 
   it('records the outcome as a label', () => {
