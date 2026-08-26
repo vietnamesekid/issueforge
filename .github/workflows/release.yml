@@ -99,7 +99,7 @@ jobs:
       # thing CI cannot cover is the tarball built from the BUMPED manifest, and
       # `ci:release` rebuilds before `changeset publish` for exactly that reason.
 
-      - uses: changesets/action@v1
+      - uses: changesets/action@v2
         id: changesets
         with:
           version: pnpm ci:version
