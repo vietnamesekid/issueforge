@@ -228,6 +228,8 @@ const FIX_BRIEF = [
   'When you are done:',
   '  - commit on a NEW branch, never on the default branch,',
   '  - open a pull request with `gh pr create --draft`, and never merge it,',
+  '    (if GitHub refuses because Actions may not create pull requests, say so in the',
+  '     comment and give the maintainer the compare link — do not retry as another user),',
   '  - comment on the issue with `gh issue comment`, linking the PR,',
   '  - and record the outcome as a label:',
   '      gh issue edit <n> --remove-label issueforge:fix --add-label issueforge:<verdict>',
