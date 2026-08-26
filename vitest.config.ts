@@ -19,5 +19,20 @@ export default defineConfig({
   test: {
     include: ['tests/**/*.test.ts', 'packages/**/*.test.ts', 'apps/**/*.test.ts'],
     exclude: ['**/node_modules/**', '**/dist/**'],
+    coverage: {
+      provider: 'v8',
+      // `json-summary` is what the badge step reads; `text` keeps the number
+      // visible in CI logs, and `lcov` is what external tools consume.
+      reporter: ['text', 'json-summary', 'lcov'],
+      include: ['packages/*/src/**/*.ts', 'apps/cli/src/**/*.ts'],
+      exclude: [
+        '**/*.test.ts',
+        // Barrel files re-export; covering them measures nothing.
+        '**/index.ts',
+        // Type-only modules erase to nothing at runtime, so v8 reports them as
+        // 0% covered no matter how thoroughly the types are used.
+        '**/*.d.ts',
+      ],
+    },
   },
 });

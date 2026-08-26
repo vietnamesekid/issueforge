@@ -4,6 +4,7 @@
 
 [![CI](https://github.com/vietnamesekid/issueforge/actions/workflows/ci.yml/badge.svg)](https://github.com/vietnamesekid/issueforge/actions/workflows/ci.yml)
 [![npm](https://img.shields.io/npm/v/issueforge/alpha)](https://www.npmjs.com/package/issueforge)
+[![coverage](https://img.shields.io/badge/coverage-80%25-green)](#tests)
 [![node](https://img.shields.io/node/v/issueforge)](https://nodejs.org)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue)](LICENSE)
 
@@ -290,6 +291,21 @@ One thing `doctor` cannot check for you: a self-hosted runner does not inherit y
 shell's `PATH`, so a version-managed Node (nvm, fnm, asdf, volta) is invisible to it and both
 `issueforge` and the `claude` it spawns become "command not found". The generated workflow reads
 `ISSUEFORGE_BIN` to work around it.
+
+### Tests
+
+```bash
+pnpm check          # typecheck + lint + test — the gate CI runs
+pnpm test:coverage  # the same suite, with a coverage report
+```
+
+292 tests. Line coverage is 80%, and CI fails below a 78% floor — the badge reports,
+the floor enforces.
+
+Coverage is measured against `src/`, excluding barrel files, which re-export and so
+measure nothing. The number is deliberately not chased upward: the tests that matter
+here exercise process groups, crash recovery and the published artifact, and a suite
+optimised for a percentage would trade those for cheap unit tests.
 
 ### Requirements
 

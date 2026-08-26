@@ -44,5 +44,18 @@ jobs:
       # exactly the class of defect that shipped a bin npm silently strips.
       - run: pnpm --filter issueforge exec publint
 
+      # Coverage runs on one matrix leg only: the number is identical across Node
+      # versions, and two legs writing the same badge would race.
+      - name: Coverage
+        if: matrix.node == '24'
+        run: pnpm test:coverage
+
+      # Fails the build if coverage drops below the floor. A badge that only reports
+      # is decorative; the floor is what actually protects the number. Raise it as
+      # coverage improves — never lower it to make a red build green.
+      - name: Enforce coverage floor
+        if: matrix.node == '24'
+        run: node scripts/check-coverage.mjs 78
+
       - name: CLI smoke test
         run: node apps/cli/dist/main.js --help

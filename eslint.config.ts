@@ -14,6 +14,8 @@ import tseslint from 'typescript-eslint';
 export default defineConfig(
   globalIgnores([
     '**/dist/**',
+    // Generated HTML/JS report, not source.
+    'coverage/**',
     '**/.tsbuild/**',
     '**/node_modules/**',
     '**/*.d.ts',
@@ -55,7 +57,7 @@ export default defineConfig(
     // tsconfig, so the project service cannot type them. Lint them without type information rather than not at
     // all. Bringing them under a tsconfig would mean making `tests/` a workspace
     // package so `@issueforge/*` resolves — more churn than the lint value justifies.
-    files: ['tests/**/*.ts', 'examples/**/*.js', 'apps/*/scripts/**/*.mjs'],
+    files: ['tests/**/*.ts', 'examples/**/*.js', '**/scripts/**/*.mjs'],
     extends: [tseslint.configs.disableTypeChecked],
   },
 

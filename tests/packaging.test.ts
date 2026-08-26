@@ -121,6 +121,28 @@ describe('release workflow', () => {
   });
 });
 
+describe('coverage badge', () => {
+  it('is not more than 5 points above the enforced floor', () => {
+    // The bug this test exists for: the badge is a hardcoded number in the README,
+    // so it drifts silently as coverage moves and ends up advertising a figure the
+    // project no longer meets. Pinning it to the CI floor means the two can only
+    // disagree by the slack deliberately left between them.
+    const readme = readFileSync(join(ROOT, 'README.md'), 'utf8');
+    const ci = readFileSync(join(ROOT, '.github/workflows/ci.yml'), 'utf8');
+
+    const badge = /coverage-(\d+)%25/.exec(readme);
+    const floor = /check-coverage\.mjs (\d+)/.exec(ci);
+
+    expect(badge?.[1], 'README has no coverage badge').toBeDefined();
+    expect(floor?.[1], 'CI does not enforce a coverage floor').toBeDefined();
+
+    const claimed = Number(badge?.[1]);
+    const enforced = Number(floor?.[1]);
+    expect(claimed).toBeGreaterThanOrEqual(enforced);
+    expect(claimed - enforced).toBeLessThanOrEqual(5);
+  });
+});
+
 describe('version', () => {
   it('matches the constant the CLI reports for --version', () => {
     // The bug this test exists for: VERSION is a hand-written constant in main.ts,
