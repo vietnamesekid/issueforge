@@ -122,7 +122,7 @@ export class ReproduceRunner {
     })) {
       const holder = store.getLock({ repo: request.repo, issueNumber: request.issueNumber });
       store.updateRun(runId, { status: 'blocked', detail: 'another run holds this issue' });
-      throw new IssueBusyError(request.issueNumber, holder?.runId ?? ('unknown' as RunId));
+      throw new IssueBusyError(request.issueNumber, holder?.runId ?? ('unknown'));
     }
 
     let workspace: Workspace | undefined;
@@ -301,7 +301,7 @@ const REPRODUCE_RESULT_SCHEMA = {
 } as const;
 
 function newRunId(): RunId {
-  return `run_${randomUUID().replace(/-/g, '').slice(0, 10)}` as RunId;
+  return `run_${randomUUID().replace(/-/g, '').slice(0, 10)}`;
 }
 
 function nextAttempt(store: RunStore, runId: RunId): number {

@@ -22,7 +22,7 @@ interface ResultLine {
   session_id?: string;
   total_cost_usd?: number;
   num_turns?: number;
-  permission_denials?: Array<{ tool_name?: string; tool_input?: Record<string, unknown> }>;
+  permission_denials?: { tool_name?: string; tool_input?: Record<string, unknown> }[];
   terminal_reason?: string;
 }
 
@@ -182,9 +182,12 @@ function parseResult(line: ResultLine): ParsedLine {
     tool: denial.tool_name ?? 'unknown',
     ...optionalDefined(
       'target',
-      denial.tool_input?.['file_path'] === undefined
-        ? undefined
-        : String(denial.tool_input['file_path']),
+      // Only a string is meaningful here. `String()` on an object would write
+      // "[object Object]" into the record of what an agent tried to reach outside its
+      // boundary — the one place that data is wanted during an incident.
+      typeof denial.tool_input?.['file_path'] === 'string'
+        ? denial.tool_input['file_path']
+        : undefined,
     ),
   }));
 

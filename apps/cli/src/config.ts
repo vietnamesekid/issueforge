@@ -50,7 +50,7 @@ export function loadConfig(cwd: string = process.cwd()): IssueForgeConfig {
 }
 
 /** Zod's default rendering is a stack of JSON; this names the fields a human must fix. */
-function describeIssues(error: { issues: ReadonlyArray<{ path: PropertyKey[]; message: string }> }): string {
+function describeIssues(error: { issues: readonly { path: PropertyKey[]; message: string }[] }): string {
   return error.issues
     .map((issue) => {
       const field = issue.path.map(String).join('.');

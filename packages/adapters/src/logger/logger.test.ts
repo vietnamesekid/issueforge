@@ -18,7 +18,7 @@ afterEach(() => { rmSync(dir, { recursive: true, force: true }); });
 
 describe('redaction', () => {
   it('catches the credential shapes that would actually leak', () => {
-    const cases: Array<[string, string]> = [
+    const cases: [string, string][] = [
       ['token ghp_abcdefghijklmnopqrstuvwxyz0123', 'github-token'],
       ['key sk-ant-api03-abcdefghijklmnop', 'anthropic'],
       ['aws AKIAIOSFODNN7EXAMPLE here', 'aws'],
@@ -201,7 +201,7 @@ describe('suppressSqliteExperimentalWarning', () => {
     process.emitWarning = ((w: string | Error, ...rest: unknown[]) => {
       seen.push(typeof w === 'string' ? w : w.message);
       void rest;
-    }) as typeof process.emitWarning;
+    });
 
     try {
       suppressSqliteExperimentalWarning();
@@ -212,7 +212,7 @@ describe('suppressSqliteExperimentalWarning', () => {
       process.emitWarning = original;
     }
 
-    expect(seen.some((m) => /SQLite/.test(m))).toBe(false);
+    expect(seen.some((m) => m.includes('SQLite'))).toBe(false);
     expect(seen).toContain('Something else entirely');
     expect(seen).toContain('A plain warning');
   });
@@ -225,7 +225,7 @@ describe('suppressSqliteExperimentalWarning', () => {
     const original = process.emitWarning;
     process.emitWarning = ((w: string | Error) => {
       seen.push(typeof w === 'string' ? w : w.message);
-    }) as typeof process.emitWarning;
+    });
 
     try {
       suppressSqliteExperimentalWarning();

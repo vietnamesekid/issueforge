@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import type { RunId, RunState, RunStatus, Sha } from '@issueforge/contracts';
+import type { RunState, RunStatus } from '@issueforge/contracts';
 import { SqliteRunStore } from '@issueforge/adapters';
 import type { AppContext } from '../context.js';
 import { planClean } from './clean.js';
@@ -27,12 +27,12 @@ const NOW = 1_800_000_000_000;
 function record(id: string, status: RunStatus, ageDays: number): void {
   const at = NOW - ageDays * DAY;
   const run: RunState = {
-    id: `run_${id}` as RunId,
+    id: `run_${id}`,
     repo: 'owner/repo',
     issueNumber: 1,
     task: 'reproduce',
     status,
-    baseSha: 'a'.repeat(40) as Sha,
+    baseSha: 'a'.repeat(40),
     harness: 'claude-code',
     createdAt: at,
     updatedAt: at,

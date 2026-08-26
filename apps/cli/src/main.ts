@@ -1,7 +1,7 @@
 import { execFileSync } from 'node:child_process';
 import { Command } from 'commander';
 import type { RunId, RunStatus, Sha } from '@issueforge/contracts';
-import { Verdict } from '@issueforge/contracts';
+import { Sha as ShaSchema, Verdict } from '@issueforge/contracts';
 import { reapOrphans } from '@issueforge/adapters';
 import { createContext } from './context.js';
 import { NotOurLabelError, parseEventFile } from './commands/handle-github-event.js';
@@ -131,7 +131,7 @@ export function buildProgram(): Command {
           issueNumber: options.issue,
           issue: { number: options.issue, title: options.title, body: options.body },
           remote,
-          baseSha: (options.baseSha ?? resolveBaseSha(options.repo, 'HEAD')) as Sha,
+          baseSha: (options.baseSha ?? resolveBaseSha(options.repo, 'HEAD')),
           ...(options.publish && process.env['ISSUEFORGE_GITHUB_TOKEN'] !== undefined
             ? { githubToken: process.env['ISSUEFORGE_GITHUB_TOKEN'] }
             : {}),
@@ -312,11 +312,13 @@ function fail(message: string): void {
 function resolveBaseSha(repo: string, ref: string): Sha {
   const remote = `https://github.com/${repo}.git`;
   const out = execFileSync('git', ['ls-remote', remote, ref], { encoding: 'utf8' });
-  const sha = out.split(/\s+/)[0];
-  if (sha === undefined || sha.length !== 40) {
+  // Parsed, not length-checked: `Sha` means 40 hex characters, and a bare length test
+  // would accept 40 characters of anything.
+  const parsed = ShaSchema.safeParse(out.split(/\s+/)[0]);
+  if (parsed.error) {
     throw new Error(`could not resolve ${ref} in ${repo}`);
   }
-  return sha as Sha;
+  return parsed.data;
 }
 
 buildProgram()

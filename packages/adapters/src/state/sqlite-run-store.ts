@@ -179,7 +179,7 @@ export class SqliteRunStore implements RunStore {
     return row ? toIssueLock(row) : null;
   }
 
-  listReapCandidates(): Array<{ run: RunState; ownership: ProcessOwnership }> {
+  listReapCandidates(): { run: RunState; ownership: ProcessOwnership }[] {
     // Every run that recorded a process group and has not cleared it. Whether the
     // group is still alive, and whether its owner is, can only be answered against
     // the OS — a killed supervisor never got to update its own row.
@@ -266,12 +266,16 @@ export class SqliteRunStore implements RunStore {
   /**
    * `node:sqlite` types rows as `Record<string, SQLOutputValue>`. Casting is confined
    * to these two helpers so the rest of the class reads in row types.
+   *
+   * The type parameter appears once by design: it is how a caller names the row shape
+   * it expects (`#queryOne<RunRow>(...)`), which is the whole point of the seam.
    */
-  #queryOne<T>(sql: string, ...values: ReadonlyArray<string | number>): T | undefined {
+  // eslint-disable-next-line @typescript-eslint/no-unnecessary-type-parameters -- see above
+  #queryOne<T>(sql: string, ...values: readonly (string | number)[]): T | undefined {
     return this.#db.prepare(sql).get(...values) as unknown as T | undefined;
   }
 
-  #queryAll<T>(sql: string, ...values: ReadonlyArray<string | number | null>): T[] {
+  #queryAll<T>(sql: string, ...values: readonly (string | number | null)[]): T[] {
     return this.#db.prepare(sql).all(...values) as unknown as T[];
   }
 

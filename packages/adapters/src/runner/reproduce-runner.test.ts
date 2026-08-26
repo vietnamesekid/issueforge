@@ -153,12 +153,15 @@ describe('ReproduceRunner', { timeout: 30_000 }, () => {
     harness.outcome = claimed('reproduced');
     await runner.run(request());
 
-    expect(harness.observedCwd).toBeDefined();
-    expect(git(['rev-parse', 'HEAD'], harness.observedCwd as string)).toBe(baseSha);
+    const cwd = harness.observedCwd;
+    if (cwd === undefined) throw new Error('the harness was never given a workspace');
+
+    expect(git(['rev-parse', 'HEAD'], cwd)).toBe(baseSha);
     // The task card is a file, so the issue body never becomes argv.
-    const card = JSON.parse(
-      readFileSync(join(harness.observedCwd as string, 'task-card.json'), 'utf8'),
-    ) as { issue: { body: string }; instructions: string };
+    const card = JSON.parse(readFileSync(join(cwd, 'task-card.json'), 'utf8')) as {
+      issue: { body: string };
+      instructions: string;
+    };
     expect(card.issue.body).toBe('when I do X');
     expect(card.instructions).toMatch(/UNTRUSTED/);
   });
@@ -177,7 +180,7 @@ describe('ReproduceRunner', { timeout: 30_000 }, () => {
     expect(existsSync(transcript)).toBe(true);
     const lines = readFileSync(transcript, 'utf8').trim().split('\n');
     expect(lines).toHaveLength(2);
-    expect(JSON.parse(lines[0] as string)).toMatchObject({ type: 'session_started' });
+    expect(JSON.parse(lines[0] ?? '{}')).toMatchObject({ type: 'session_started' });
   });
 
   it('records one attempt row, closed with its cost', async () => {

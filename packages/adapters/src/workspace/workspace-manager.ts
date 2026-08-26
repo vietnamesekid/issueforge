@@ -126,7 +126,7 @@ export class GitWorkspaceManager implements WorkspaceManager {
     args.push(request.remote, path);
 
     await git(args);
-    await assertIndependent(path);
+    assertIndependent(path);
 
     // Pin even when a branch was named: the branch may have moved since the fix ran.
     if (request.branch === undefined) {
@@ -166,7 +166,7 @@ export class GitWorkspaceManager implements WorkspaceManager {
  * clone behaves identically until the day a fix run writes something the verifier
  * then reads and trusts.
  */
-async function assertIndependent(path: string): Promise<void> {
+function assertIndependent(path: string): void {
   const alternates = join(path, '.git', 'objects', 'info', 'alternates');
   if (existsSync(alternates)) {
     throw new WorkspaceError(

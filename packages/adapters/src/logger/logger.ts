@@ -83,5 +83,5 @@ export function suppressSqliteExperimentalWarning(): void {
     (original as (...args: readonly unknown[]) => void)(warning, ...rest);
   };
 
-  process.emitWarning = patched as typeof process.emitWarning;
+  process.emitWarning = patched;
 }

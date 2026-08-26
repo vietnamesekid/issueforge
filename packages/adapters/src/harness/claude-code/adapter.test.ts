@@ -96,7 +96,7 @@ describe('ClaudeCodeAdapter', { timeout: 20_000 }, () => {
     ]);
 
     const run = new ClaudeCodeAdapter().run(request());
-    const events = (await drain(run)) as Array<{ type: string }>;
+    const events = (await drain(run)) as { type: string }[];
     const outcome = await run.outcome();
 
     expect(events.map((e) => e.type)).toEqual(

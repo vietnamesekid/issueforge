@@ -98,9 +98,12 @@ function matchesGlob(path: string, pattern: string): boolean {
 }
 
 function matchSegments(path: readonly string[], pattern: readonly string[]): boolean {
-  if (pattern.length === 0) return path.length === 0;
-
+  // Destructuring narrows `head` to `string | undefined`, and an explicit check on it
+  // is what tells the compiler the pattern is non-empty. Testing `pattern.length`
+  // instead would leave `head` possibly-undefined under `noUncheckedIndexedAccess`,
+  // which is what previously forced an assertion here.
   const [head, ...rest] = pattern;
+  if (head === undefined) return path.length === 0;
 
   if (head === '**') {
     // `**` matches zero or more segments, so try every split point.
@@ -110,10 +113,10 @@ function matchSegments(path: readonly string[], pattern: readonly string[]): boo
     return false;
   }
 
-  if (path.length === 0) return false;
+  const [segment, ...tail] = path;
+  if (segment === undefined) return false;
 
-  const segment = path[0] as string;
-  return matchSegment(segment, head as string) && matchSegments(path.slice(1), rest);
+  return matchSegment(segment, head) && matchSegments(tail, rest);
 }
 
 /** Match one path segment. `*` matches any run of characters within the segment. */
@@ -124,8 +127,9 @@ function matchSegment(segment: string, pattern: string): boolean {
   const parts = pattern.split('*');
   let index = 0;
 
-  for (let i = 0; i < parts.length; i++) {
-    const part = parts[i] as string;
+  // `entries()` yields the element itself, so each `part` is a `string` without an
+  // indexed read the compiler has to be talked out of.
+  for (const [i, part] of parts.entries()) {
     if (part.length === 0) continue;
 
     if (i === 0) {
@@ -140,7 +144,7 @@ function matchSegment(segment: string, pattern: string): boolean {
   }
 
   // A pattern not ending in `*` must consume the rest of the segment.
-  const last = parts[parts.length - 1] as string;
+  const last = parts.at(-1) ?? '';
   return last.length === 0 || segment.endsWith(last);
 }
 

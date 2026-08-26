@@ -34,7 +34,7 @@ function makeRun(overrides: Partial<RunState> = {}): RunState {
     createdAt: 1_000,
     updatedAt: 1_000,
     ...overrides,
-  } as RunState;
+  };
 }
 
 let dir: string;

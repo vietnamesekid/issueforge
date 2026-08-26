@@ -1,5 +1,6 @@
 import type { IssueForgeConfig, Sha, TaskCard } from '@issueforge/contracts';
 import { TaskCard as TaskCardSchema } from '@issueforge/contracts';
+import { ALWAYS_FORBIDDEN } from './write-boundary.js';
 
 /**
  * Builds the brief a harness receives.
@@ -26,24 +27,18 @@ export interface TaskCardInput {
 }
 
 /**
- * Paths blocked regardless of what the harness decides.
+ * Paths nothing may write, whatever the harness decides.
  *
- * Not a constraint on how to do the work. `.github/**` is how a run would rewrite the
- * workflow that runs it, `.git/**` how it would rewrite the history verification
- * depends on, and the rest are credentials that have no business changing during a
- * bug reproduction.
+ * Imported rather than restated: this is the same list the post-run audit enforces
+ * (`ALWAYS_FORBIDDEN`), and the two were previously identical literals in two files.
+ * If they had drifted, the harness would have been told it may write a path the audit
+ * then failed it for — a run marked `blocked` for obeying its own brief.
+ *
+ * The distinction is worth keeping in the reader's head, though: this is what the
+ * harness is TOLD, `ALWAYS_FORBIDDEN` is what is ENFORCED. Telling it is a courtesy;
+ * the audit is the control.
  */
-const NEVER_WRITABLE = [
-  '.github/**',
-  '.git/**',
-  '**/.env',
-  '**/.env.*',
-  '**/*.pem',
-  '**/id_rsa*',
-  '**/id_ed25519*',
-  '**/.npmrc',
-  '**/.netrc',
-];
+const NEVER_WRITABLE = ALWAYS_FORBIDDEN;
 
 export function buildReproduceCard(input: TaskCardInput): TaskCard {
   const { config } = input;

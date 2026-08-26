@@ -56,7 +56,7 @@ export interface RunStore {
    * invocation, because an orphan cannot be detected from `status` alone: a
    * SIGKILLed supervisor never gets to update its own row.
    */
-  listReapCandidates(): Array<{ run: RunState; ownership: ProcessOwnership }>;
+  listReapCandidates(): { run: RunState; ownership: ProcessOwnership }[];
 
   /**
    * Record a harness invocation. One row per attempt, so a retry adds history rather
