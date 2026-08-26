@@ -36,7 +36,9 @@ on:
     types: [labeled]
 
 permissions:
-  contents: read
+  # `write` because the fix task pushes a branch. The agent still cannot reach
+  # \`.github/**\` — that is blocked by the write boundary, not by this token.
+  contents: write
   issues: write
   pull-requests: write
 
