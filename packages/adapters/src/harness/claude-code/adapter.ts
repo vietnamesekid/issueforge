@@ -3,7 +3,7 @@ import { promisify } from 'node:util';
 import type { HarnessCapabilities, HarnessEvent, HarnessRunOutcome } from '@issueforge/contracts';
 import { HarnessContractError, type HarnessAdapter, type HarnessRun, type HarnessRunRequest } from '@issueforge/core';
 import { spawnSupervised, type SupervisedProcess } from '../../process/index.js';
-import { buildClaudeArgv, DEFAULT_TOOLS, IMPLICIT_TOOLS } from './argv.js';
+import { buildClaudeArgv } from './argv.js';
 import { parseLine, readClaim, type SessionPosture, type TerminalOutcome } from './events.js';
 
 const execFileAsync = promisify(execFile);
@@ -156,11 +156,17 @@ class ClaudeCodeRun implements HarnessRun {
 }
 
 /**
- * Verify the sandbox is the one that was requested.
+ * Verify the one thing that must hold before any token is spent.
  *
- * Returns a message when it is not. The MCP check is the load-bearing one: without
- * `--strict-mcp-config` a run was observed inheriting five of the developer's
- * authenticated servers, which turns a hostile issue body into an exfiltration path.
+ * Only MCP is checked. Without `--strict-mcp-config` a run was observed inheriting
+ * five of the developer's authenticated servers — Gmail, Drive, Notion — which turns
+ * a hostile issue body into an exfiltration path. Nothing the task needs comes from
+ * them, so their presence means the sandbox is not what was asked for.
+ *
+ * The tool set is deliberately NOT checked. Which tools the harness needs is its
+ * decision, and an earlier version of this function killed a live run for carrying
+ * `StructuredOutput` — a tool Claude Code adds precisely because we ask for a
+ * structured result. We caused it, then treated it as an intrusion.
  */
 function checkPosture(posture: SessionPosture): string | undefined {
   if (posture.mcpServers.length > 0) {
@@ -170,22 +176,6 @@ function checkPosture(posture: SessionPosture): string | undefined {
     );
   }
 
-  const unexpected = posture.tools.filter((tool) => !isAllowed(tool));
-  if (unexpected.length > 0) {
-    return `harness started with unrequested tools: ${unexpected.join(', ')}`;
-  }
-
   return undefined;
-}
-
-/**
- * The posture check compares against `--tools`, not `--allowedTools`.
- *
- * `system/init` reports which tools EXIST, which is what `--tools` sets; the
- * permission allowlist is a different question and its scoped entries (`Bash(npm *)`)
- * never appear here.
- */
-function isAllowed(tool: string): boolean {
-  return DEFAULT_TOOLS.includes(tool) || IMPLICIT_TOOLS.includes(tool);
 }
 

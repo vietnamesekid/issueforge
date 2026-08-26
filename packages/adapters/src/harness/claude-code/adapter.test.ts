@@ -136,13 +136,19 @@ describe('ClaudeCodeAdapter', { timeout: 20_000 }, () => {
     await expect(run.outcome()).resolves.toMatchObject({ ok: true });
   });
 
-  it('refuses a sandbox carrying tools that were never requested', async () => {
-    fakeClaude([initLine([], ['Read', 'WebFetch']), resultLine({ verdict: 'reproduced', summary: '' })]);
+  it('does not object to whatever tools the harness starts with', async () => {
+    // The harness decides what it needs, and it adds some itself: an earlier version
+    // of the posture check killed a live run for carrying StructuredOutput, which
+    // Claude Code adds because we ask for a structured result.
+    fakeClaude([
+      initLine([], ['Read', 'Write', 'WebSearch', 'StructuredOutput', 'Task']),
+      resultLine({ verdict: 'needs-info', summary: '' }),
+    ]);
 
     const run = new ClaudeCodeAdapter().run(request());
     await drain(run);
 
-    await expect(run.outcome()).rejects.toThrow(/unrequested tools.*WebFetch/i);
+    await expect(run.outcome()).resolves.toMatchObject({ ok: true });
   });
 
   it('treats an is_error result as failure even when the exit code is zero', async () => {

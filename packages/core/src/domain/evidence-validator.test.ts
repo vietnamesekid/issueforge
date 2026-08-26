@@ -204,6 +204,60 @@ describe('validateReproduction — the ladder', () => {
   });
 });
 
+describe('setup before replay', () => {
+  it('runs the setup the harness named before the reproduction', async () => {
+    // A workspace is a clean clone. Without this, a correct test fails for want of an
+    // install and reads as "the bug did not reproduce" — which would be false. This
+    // is exactly what happened on the first live run.
+    const replayer = new ScriptedReplayer(
+      { exitCode: 0, output: 'installed' }, // setup
+      { exitCode: 1, output: 'AssertionError' }, // the reproduction
+    );
+
+    const outcome = await validateReproduction(
+      request({
+        claim: {
+          verdict: 'reproduced',
+          reproCommand: ['npm', 'test'],
+          setupCommand: ['npm', 'ci'],
+          testFile: 'test/repro.test.js',
+          summary: 's',
+        },
+        replayer,
+      }),
+    );
+
+    expect(outcome.verdict).toBe('reproduced');
+    expect(replayer.calls[0]).toEqual(['npm', 'ci']); // setup ran first
+    expect(replayer.calls[1]).toEqual(['npm', 'test']);
+  });
+
+  it('reports needs-info when setup itself fails', async () => {
+    // A broken install says nothing about the bug, so it must not be graded as one.
+    const outcome = await validateReproduction(
+      request({
+        claim: {
+          verdict: 'reproduced',
+          reproCommand: ['npm', 'test'],
+          setupCommand: ['npm', 'ci'],
+          testFile: 'test/repro.test.js',
+          summary: 's',
+        },
+        replayer: new ScriptedReplayer({ exitCode: 1, output: 'network error' }),
+      }),
+    );
+
+    expect(outcome.verdict).toBe('needs-info');
+    expect(outcome.why).toMatch(/setup step .* failed/);
+  });
+
+  it('skips setup when the harness says none is needed', async () => {
+    const replayer = new ScriptedReplayer({ exitCode: 1, output: 'AssertionError' });
+    await validateReproduction(request({ replayer }));
+    expect(replayer.calls).toHaveLength(1); // only the reproduction
+  });
+});
+
 describe('the differential check — step 7', () => {
   it('accepts a repro that fails on the bug and passes once it is removed', async () => {
     const toggle = new RecordingToggle();

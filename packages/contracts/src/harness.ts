@@ -86,6 +86,16 @@ export const HarnessResult = z.object({
   reproCommand: Argv.optional(),
   /** Repo-relative path to the failing test or repro script. */
   testFile: z.string().min(1).optional(),
+  /**
+   * What must run before `reproCommand` works in a clean checkout.
+   *
+   * A workspace is a fresh clone, so it has no dependencies installed. The harness
+   * knows what this repository needs — an install, a build, a codegen step — and we
+   * do not, so it tells us rather than us guessing. Verified the hard way: a live run
+   * produced a perfectly good vitest test whose command could not run, and the
+   * validator correctly reported an environmental failure rather than a reproduction.
+   */
+  setupCommand: Argv.optional(),
   /** Substring the replay output is expected to contain, if the harness names one. */
   expectedSignal: z.string().optional(),
   summary: z.string().default(''),

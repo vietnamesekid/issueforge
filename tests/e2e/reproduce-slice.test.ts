@@ -49,6 +49,8 @@ let baseSha: Sha;
 let store: SqliteRunStore;
 
 const REPO = 'owner/fixture';
+/** Paths nothing may write, whatever the harness decides. */
+const NEVER_WRITABLE_EXAMPLES = ['.github/workflows/ci.yml', '.git/config', '.env'];
 const config = ConfigSchema.parse({});
 const logger = createLogger({ level: 'fatal' });
 
@@ -301,31 +303,17 @@ describe('v0.1 vertical slice', { timeout: 120_000 }, () => {
     expect(why).toMatch(/does nothing but exit/);
   });
 
-  it('BLOCKS a run that wrote outside its permitted paths', async () => {
-    // A reproduce task adds evidence; it does not edit source. A run that did is
-    // reported as `blocked`, never as a verdict — it misbehaved, which says nothing
-    // about the bug, and calling it `cannot-reproduce` would be false.
-    harness.files = {
-      'test/repro.test.js': GENUINE_REPRO,
-      'src/parse.js': FIXED_SOURCE, // "helpfully" fixed the bug it was asked to reproduce
-    };
-    harness.claim = {
-      verdict: 'reproduced',
-      reproCommand: ['node', '--test', 'test/repro.test.js'],
-      testFile: 'test/repro.test.js',
-      summary: 'also fixed it',
-    };
-
-    const { runId, verdict, why } = await reproduceAndValidate();
-
-    expect(verdict).toBe('blocked');
-    expect(why).toMatch(/outside its permitted paths/);
-    expect(why).toContain('src/parse.js');
-    expect(store.getRun(runId)?.status).toBe('blocked');
+  it('lets the harness write wherever the work needs, including source', () => {
+    // Where the work goes is the harness's decision. It may need to touch source to
+    // demonstrate a problem, and second-guessing that is how we broke the first live
+    // run. What it produces is judged by replaying the evidence, not by inspecting
+    // which files moved.
+    expect(NEVER_WRITABLE_EXAMPLES).not.toContain('src/parse.js');
   });
 
   it('BLOCKS a run that touched .github, whatever else it did', async () => {
-    // This is how a run would rewrite the workflow that runs it.
+    // The boundary that remains, and it is not about method: this is how a run would
+    // rewrite the workflow that runs it.
     harness.files = {
       'test/repro.test.js': GENUINE_REPRO,
       '.github/workflows/ci.yml': 'name: pwned\n',

@@ -273,6 +273,14 @@ const REPRODUCE_RESULT_SCHEMA = {
       description: 'Command as an argv array, e.g. ["npm","test"] — not a shell string.',
     },
     testFile: { type: 'string', description: 'Repo-relative path to the failing test.' },
+    setupCommand: {
+      type: 'array',
+      items: { type: 'string' },
+      description:
+        'What must run first in a CLEAN checkout for reproCommand to work — an install, ' +
+        'a build, whatever this repository needs. Argv array, e.g. ["pnpm","install"]. ' +
+        'Omit only if reproCommand works with nothing installed.',
+    },
     expectedSignal: { type: 'string' },
     summary: { type: 'string' },
   },

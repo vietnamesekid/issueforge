@@ -45,6 +45,8 @@ export interface ValidationRequest {
   /** Reads an artifact's contents; absent means it does not exist. */
   readArtifact(path: string): string | null;
   replayer: Replayer;
+  /** Setup is usually slower than the test it enables; allow it its own budget. */
+  setupTimeoutMs?: number;
   /** Enables step 7. When absent the differential check is recorded as skipped. */
   defect?: DefectToggle;
   timeoutMs?: number;
@@ -141,6 +143,25 @@ export async function validateReproduction(
   pass('artifacts-assert-something');
 
   // ---- 5. replay it ourselves ---------------------------------------------
+  //
+  // Any setup the harness named runs first. A workspace is a clean clone with no
+  // dependencies, so without this a perfectly good test fails for want of an install
+  // and gets read as "the bug did not reproduce" — which would be false.
+  if (request.claim.setupCommand !== undefined && request.claim.setupCommand.length > 0) {
+    const setup = await request.replayer.run(request.claim.setupCommand, {
+      cwd: request.cwd,
+      ...(request.setupTimeoutMs !== undefined ? { timeoutMs: request.setupTimeoutMs } : {}),
+    });
+    if (setup.exitCode !== 0) {
+      return reject(
+        'needs-info',
+        'replay-fails-on-base',
+        `the setup step the harness named failed (${describeCommand(request.claim.setupCommand)}), ` +
+          `so the reproduction could not be checked`,
+      );
+    }
+  }
+
   const onBase = await request.replayer.run(command, {
     cwd: request.cwd,
     ...(request.timeoutMs !== undefined ? { timeoutMs: request.timeoutMs } : {}),
@@ -253,6 +274,10 @@ function collectArtifacts(testFile: string | undefined, command: Argv): string[]
   }
 
   return paths;
+}
+
+function describeCommand(command: Argv): string {
+  return command.join(' ');
 }
 
 function short(sha: Sha): string {

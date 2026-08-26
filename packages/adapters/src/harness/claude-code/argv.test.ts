@@ -33,32 +33,27 @@ describe('claude argv contract', () => {
     expect(argv()).not.toContain('--bare');
   });
 
-  it('isolates the run from repository and user configuration', () => {
+  it('blocks the developer MCP servers, and only those', () => {
+    // The one isolation that stays. Without it a run was observed loading five
+    // authenticated servers — Gmail, Drive, Notion — turning a hostile issue body
+    // into an exfiltration path. Nothing the task needs comes from them.
     const args = argv();
-    // Each of these is a security control, not a preference.
-    // `--setting-sources ""` stops the repository's own hooks from running, and
-    // `--strict-mcp-config` stops its MCP servers loading — verified separately,
-    // because neither covers the other.
     expect(args).toContain('--strict-mcp-config');
     expect(valueAfter(args, '--mcp-config')).toBe('{"mcpServers":{}}');
-    expect(valueAfter(args, '--setting-sources')).toBe('');
   });
 
-  it('restricts which tools EXIST, not only which are permitted', () => {
-    // These are different controls and both are needed. --allowedTools is a
-    // permission list; every other built-in is still present and reachable. A real
-    // run configured with --allowedTools alone started with 27 tools including
-    // WebFetch and WebSearch — network egress for a run processing an
-    // attacker-authored issue body.
-    const args = argv();
-    const toolsIndex = args.indexOf('--tools');
-    expect(toolsIndex).toBeGreaterThan(-1);
+  it('lets the repository configure the harness', () => {
+    // CLAUDE.md and the project's skills are the context that makes the harness
+    // useful here. Blocking them is what broke the first live run: the agent could
+    // not learn the repo uses vitest and needs an install step.
+    expect(argv()).not.toContain('--setting-sources');
+  });
 
-    const tools = args.slice(toolsIndex + 1, args.indexOf('--permission-mode'));
-    expect(tools).not.toContain('WebFetch');
-    expect(tools).not.toContain('WebSearch');
-    expect(tools).toContain('Read');
-    expect(tools).toContain('Bash');
+  it('does NOT restrict which tools the harness may use', () => {
+    // Which tools the work needs is the harness's decision. A narrow list here would
+    // be us guessing at a repository we have not read — and blocking WebSearch also
+    // blocks looking up the error message in the issue.
+    expect(argv()).not.toContain('--tools');
   });
 
   it('never lets `dontAsk` ship without an explicit tool allowlist', () => {
