@@ -394,9 +394,25 @@ function fail(message: string): void {
  * An `issues` event carries no issue-specific SHA, so this asks the remote for the
  * branch tip and records it — a run must never track a moving ref.
  */
-function resolveBaseSha(repo: string, ref: string): Sha {
+export function resolveBaseSha(repo: string, ref: string): Sha {
   const remote = `https://github.com/${repo}.git`;
-  const out = execFileSync('git', ['ls-remote', remote, ref], { encoding: 'utf8' });
+
+  let out: string;
+  try {
+    // stderr is captured rather than inherited: git prints its own two-line
+    // "Repository not found" to the terminal, and execFileSync then throws with
+    // "Command failed: git ls-remote ..." — so the user saw the same message twice,
+    // followed by an internal command line, and no statement of what to do.
+    out = execFileSync('git', ['ls-remote', remote, ref], {
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+  } catch {
+    throw new Error(
+      `cannot read ${repo}: it does not exist, is private, or your git credentials ` +
+        `do not reach it. Check \`gh auth status\`, and that the name is "owner/repo".`,
+    );
+  }
   // Parsed, not length-checked: `Sha` means 40 hex characters, and a bare length test
   // would accept 40 characters of anything.
   const parsed = ShaSchema.safeParse(out.split(/\s+/)[0]);

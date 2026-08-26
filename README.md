@@ -232,6 +232,30 @@ PRs are not optional.
 
 ---
 
+## Try it in two minutes
+
+No self-hosted runner, no workflow, no repository changes. Run one task by hand and read what
+comes back:
+
+```bash
+npm install -g issueforge@alpha
+issueforge doctor                                        # checks node, git, gh, Claude Code
+issueforge run reproduce --repo you/your-repo --issue 42
+```
+
+`run` does the whole thing locally: it pins a worktree to the current commit, hands the issue to
+Claude Code as a task-card file, and prints the verdict. `reproduce` investigates and never
+changes your code.
+
+It does write to the issue: the task card asks the agent to post its findings as a comment and
+move the `issueforge:*` label, using your own `gh` login. That report is the output — but it
+means the first repository you point this at should be one you are happy to see a comment on.
+
+Automating it — a label on an issue starting a run on its own — is the [next step](#usage), and
+that is the part that needs a self-hosted runner.
+
+---
+
 ## Install
 
 ```bash

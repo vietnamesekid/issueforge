@@ -84,3 +84,19 @@ function workflowOf(cwd: string): string {
   runInit(cwd);
   return readFileSync(join(cwd, '.github', 'workflows', 'issueforge.yml'), 'utf8');
 }
+
+describe('next steps', () => {
+  it('offers the no-runner path before the one that needs a runner', () => {
+    // The bug this test exists for: `init` sent every new user straight to
+    // "register a self-hosted runner" — eight manual commands and repository admin
+    // rights — without mentioning that `issueforge run` already works locally with
+    // none of it. Most people who bounce, bounce there.
+    const text = renderInit(runInit(dir));
+
+    const local = text.indexOf('issueforge run reproduce');
+    const runner = text.indexOf('self-hosted runner');
+
+    expect(local, 'init never mentions the local run').toBeGreaterThan(-1);
+    expect(local).toBeLessThan(runner);
+  });
+});
