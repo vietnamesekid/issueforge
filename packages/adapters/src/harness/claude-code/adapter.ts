@@ -1,4 +1,7 @@
 import { execFile } from 'node:child_process';
+import { mkdirSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { promisify } from 'node:util';
 import {
   optional,
@@ -78,6 +81,18 @@ export class ClaudeCodeAdapter implements HarnessAdapter {
           // named explicitly here rather than inherited — the environment allowlist
           // still blocks everything else.
           ...optionalDefined('GH_TOKEN', request.githubToken),
+          // Isolate `gh` from the developer's own login.
+          //
+          // GH_TOKEN alone is not enough: `HOME` is on the environment allowlist, so
+          // `gh` finds the developer's keychain entry and prefers it. A live run posted
+          // the agent's analysis under a human's account — for a product whose safety
+          // argument is "a human reviews what the agent wrote", attributing the agent's
+          // words to a person is close to the worst available bug. It would also fail on
+          // a headless runner, which has no keychain to fall back to.
+          //
+          // An empty config directory leaves `gh` with exactly the token it was handed:
+          // repository-scoped, expiring with the run.
+          ...optionalDefined('GH_CONFIG_DIR', ghConfigDir(request)),
         },
       },
       ...optionalDefined('signal', request.signal),
@@ -209,3 +224,23 @@ function checkPosture(posture: SessionPosture): string | undefined {
   return undefined;
 }
 
+/**
+ * A private `gh` configuration directory for this run, when it has a token to use.
+ *
+ * Deliberately OUTSIDE the workspace. Inside it, the directory would show up in
+ * `git status --porcelain --untracked-files=all` — the inventory the post-run audit uses
+ * to report what the agent changed — and on a fix task the agent could commit it.
+ *
+ * Measured: with `GH_TOKEN` set, `gh` writes nothing here at all and the token never
+ * reaches disk. The directory exists only to stop `gh` reading `~/.config/gh`.
+ *
+ * Absent when there is no token: a local run with no GitHub side has nothing to isolate,
+ * and an empty config would only break `gh` for a developer who legitimately signed in.
+ */
+function ghConfigDir(request: HarnessRunRequest): string | undefined {
+  if (request.githubToken === undefined) return undefined;
+
+  const dir = join(tmpdir(), `issueforge-gh-${request.sessionId}`);
+  mkdirSync(dir, { recursive: true });
+  return dir;
+}

@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { chmodSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { TaskCard } from '@issueforge/contracts';
@@ -30,9 +30,26 @@ function fakeClaude(lines: readonly string[], exitCode = 0): void {
   const script = join(bin, 'claude');
   const payload = lines.map((l) => `echo '${l.replace(/'/g, `'\\''`)}'`).join('\n');
   mkdirSync(bin, { recursive: true });
-  writeFileSync(script, `#!/bin/sh\n${payload}\nexit ${exitCode}\n`, { flag: 'w' });
+  // `env` is dumped so a test can assert what the child actually received, rather than
+  // what the caller believed it passed.
+  writeFileSync(
+    script,
+    `#!/bin/sh\nenv > "${join(dir, 'child-env.txt')}"\n${payload}\nexit ${exitCode}\n`,
+    { flag: 'w' },
+  );
   chmodSync(script, 0o755);
   process.env['PATH'] = `${bin}:${process.env['PATH'] ?? ''}`;
+}
+
+/** What the spawned process really saw, parsed from the fake CLI's `env` dump. */
+function readSpawnedEnv(): Record<string, string> {
+  const raw = readFileSync(join(dir, 'child-env.txt'), 'utf8');
+  return Object.fromEntries(
+    raw
+      .split('\n')
+      .filter((line) => line.includes('='))
+      .map((line) => [line.slice(0, line.indexOf('=')), line.slice(line.indexOf('=') + 1)]),
+  );
 }
 
 const initLine = (mcp: unknown[] = [], tools: string[] = ['Read', 'Write']): string =>
@@ -203,6 +220,36 @@ describe('ClaudeCodeAdapter', { timeout: 20_000 }, () => {
 
     expect(outcome.denials).toBe(1);
     expect(outcome.injectionSuspected).toBe(true);
+  });
+
+  it('gives `gh` its own config dir, so it cannot fall back to the developer login', async () => {
+    // The bug this test exists for: GH_TOKEN was delivered correctly, but HOME is on the
+    // env allowlist, so `gh` found the developer's keychain entry and preferred it. A
+    // live run posted the agent's analysis under a human's account — for a tool whose
+    // safety argument is "a human reviews what the agent wrote", mislabelling the author
+    // is close to the worst available bug. It would also fail on a headless runner.
+    fakeClaude([initLine(), resultLine({ verdict: 'needs-info', summary: '' })]);
+
+    const run = new ClaudeCodeAdapter().run({ ...request(), githubToken: 'ghs_job_token' });
+    await drain(run);
+    await run.outcome();
+
+    const env = readSpawnedEnv();
+    expect(env['GH_TOKEN']).toBe('ghs_job_token');
+    expect(env['GH_CONFIG_DIR'], 'gh must not read the developer config').toBeDefined();
+    // Outside the workspace: inside, it would appear in the changed-file inventory the
+    // audit reports, and a fix task could commit it.
+    expect(env['GH_CONFIG_DIR']).not.toContain(dir);
+  });
+
+  it('sets no gh config dir when there is no token to isolate', async () => {
+    fakeClaude([initLine(), resultLine({ verdict: 'needs-info', summary: '' })]);
+
+    const run = new ClaudeCodeAdapter().run(request());
+    await drain(run);
+    await run.outcome();
+
+    expect(readSpawnedEnv()['GH_CONFIG_DIR']).toBeUndefined();
   });
 
   it('detect() reports a missing CLI instead of throwing', async () => {
