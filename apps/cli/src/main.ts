@@ -1,6 +1,7 @@
 import { execFileSync } from 'node:child_process';
 import { Command } from 'commander';
-import type { Sha } from '@issueforge/contracts';
+import type { RunId, RunStatus, Sha } from '@issueforge/contracts';
+import { Verdict } from '@issueforge/contracts';
 import { reapOrphans } from '@issueforge/adapters';
 import { createContext } from './context.js';
 import { NotOurLabelError, parseEventFile } from './commands/handle-github-event.js';
@@ -265,15 +266,31 @@ export function buildProgram(): Command {
  * working run as a broken one in the Actions UI, training maintainers to ignore red.
  * A non-zero exit is reserved for IssueForge itself failing.
  */
-const CONCLUDED: readonly string[] = ['reproduced', 'cannot-reproduce', 'needs-info'];
-
-function report(result: { runId: string; status: string; detail: string }, json: boolean): void {
+function report(
+  result: { runId: RunId; status: RunStatus; detail: string },
+  json: boolean,
+): void {
   if (json) emit(result);
   else process.stdout.write(`${result.status}: ${result.detail}\n`);
 
-  if (result.status === 'blocked') process.exitCode = EXIT.blocked;
-  else if (CONCLUDED.includes(result.status)) process.exitCode = EXIT.ok;
-  else process.exitCode = EXIT.failed;
+  process.exitCode = exitCodeFor(result.status);
+}
+
+/**
+ * Map a run's final status to a process exit code.
+ *
+ * Derived from `Verdict` rather than a hand-written list: the two had already been
+ * copied apart, and because the copy was typed `string[]` a new verdict would have
+ * exited non-zero with no compile error and no failing test.
+ */
+function exitCodeFor(status: RunStatus): number {
+  if (status === 'blocked') return EXIT.blocked;
+  // A conclusion the harness reached, including `needs-info`. "I could not tell from
+  // this issue" is a real finding reported to the issue for a human to act on;
+  // exiting non-zero would mark a working run red in the Actions UI and train
+  // maintainers to ignore red. Non-zero is reserved for IssueForge itself failing.
+  if ((Verdict.options as readonly string[]).includes(status)) return EXIT.ok;
+  return EXIT.failed;
 }
 
 /** Machine-readable output goes to stdout; logs go to stderr, so the two never mix. */

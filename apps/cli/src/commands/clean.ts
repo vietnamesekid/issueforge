@@ -1,8 +1,8 @@
-import { existsSync, rmSync, statSync } from 'node:fs';
-import { readdirSync } from 'node:fs';
+import { existsSync, readdirSync, rmSync, statSync } from 'node:fs';
 import { join } from 'node:path';
+import type { RunId, RunStatus } from '@issueforge/contracts';
 import { isTerminal } from '@issueforge/core';
-import { reapOrphans, runsRoot, type SqliteRunStore } from '@issueforge/adapters';
+import { reapOrphans, runsRoot } from '@issueforge/adapters';
 import type { AppContext } from '../context.js';
 
 /**
@@ -14,8 +14,8 @@ import type { AppContext } from '../context.js';
  */
 
 export interface CleanTarget {
-  runId: string;
-  status: string;
+  runId: RunId;
+  status: RunStatus;
   ageDays: number;
   paths: string[];
 }
@@ -54,7 +54,7 @@ export function executeClean(context: AppContext, targets: readonly CleanTarget[
     for (const path of target.paths) {
       rmSync(path, { recursive: true, force: true });
     }
-    (context.store as SqliteRunStore).updateRun(target.runId, {
+    context.store.updateRun(target.runId, {
       detail: `artifacts removed by clean (was: ${target.status})`,
     });
   }

@@ -1,4 +1,4 @@
-import { optionalDefined, type Sha } from '@issueforge/contracts';
+import { optionalDefined, type RunId, type RunStatus, type Sha } from '@issueforge/contracts';
 import { ReproduceRunner, IssueBusyError } from '@issueforge/adapters';
 import type { AppContext } from '../context.js';
 
@@ -26,8 +26,15 @@ export interface RunTaskOptions {
 }
 
 export interface RunTaskOutput {
-  runId: string;
-  status: string;
+  runId: RunId;
+  /**
+   * The run's final status.
+   *
+   * Deliberately `RunStatus`, not `string`: this used to be widened, which let the
+   * CLI's exit-code table drift into a hand-copied list of verdicts that no longer
+   * had to agree with the enum.
+   */
+  status: RunStatus;
   detail: string;
 }
 
