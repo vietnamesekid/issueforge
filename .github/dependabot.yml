@@ -1,0 +1,31 @@
+# Security and version updates.
+#
+# This project spawns a coding agent on the maintainer's machine with their
+# credentials, so a compromised transitive dependency is a real path in — worth more
+# than the review cost of a few PRs a month.
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    # One PR per week's worth of routine bumps rather than one per package. Security
+    # advisories are exempt from grouping and still arrive on their own.
+    groups:
+      dev-dependencies:
+        dependency-type: development
+      production-dependencies:
+        dependency-type: production
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: 'fix'
+      prefix-development: 'chore'
+
+  # The pinned actions in CI and Release are as much a supply chain as npm is: a
+  # release publishes to npm with the repo's OIDC identity.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: 'chore'

@@ -187,6 +187,29 @@ describe('release workflow', () => {
   });
 });
 
+describe('README claims', () => {
+  const readme = readFileSync(join(ROOT, 'README.md'), 'utf8');
+
+  it('quotes no test count that a single commit would falsify', () => {
+    // The bug this test exists for: the README said "292 tests" while the suite had
+    // grown to 299. A hardcoded count is stale the moment anyone adds a test, and a
+    // README that is wrong about something checkable is worse than one that omits
+    // it — a reader who catches it stops trusting the rest.
+    expect(readme).not.toMatch(/\b\d{2,}\s+tests\b/);
+  });
+
+  it('does not claim there is only one published version', () => {
+    // Written when alpha.1 was the only release, and false from alpha.2 onward.
+    expect(readme).not.toMatch(/the only published version/);
+  });
+
+  it('points its install instructions at the alpha tag', () => {
+    // A bare `npm install -g issueforge` resolves to a prerelease until a stable
+    // release exists; the documented command has to name the tag.
+    expect(readme).toMatch(/npm install -g issueforge@alpha/);
+  });
+});
+
 describe('version', () => {
   it('is injected from the manifest at build time, never hand-written', () => {
     // The bug this test exists for: VERSION used to be a hand-written constant, so a

@@ -1,0 +1,54 @@
+name: Bug report
+description: Something IssueForge did wrong on your machine.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        `issueforge doctor` checks everything a run depends on. Please run it first —
+        most reports turn out to be a missing dependency it names outright.
+
+  - type: textarea
+    id: doctor
+    attributes:
+      label: Output of `issueforge doctor`
+      description: Paste it whole. It never prints credentials, only whether one is present.
+      render: text
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: IssueForge version
+      description: '`issueforge --version`'
+      placeholder: 0.1.0-alpha.3
+    validations:
+      required: true
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened, and what you expected instead
+    validations:
+      required: true
+
+  - type: textarea
+    id: repro
+    attributes:
+      label: The command or label that triggered it
+      description: |
+        The exact `issueforge` command, or the label you applied and on what kind of
+        issue. If a run produced a report on the issue, a link helps.
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant output
+      description: |
+        Anything IssueForge printed. Redact repository names or issue text you would
+        rather not share — the shape of the failure usually matters more than the
+        content.
+      render: text
