@@ -2,6 +2,11 @@
 
 **A local-first GitHub IssueOps supervisor for the coding agents you already have installed.**
 
+[![CI](https://github.com/vietnamesekid/issueforge/actions/workflows/ci.yml/badge.svg)](https://github.com/vietnamesekid/issueforge/actions/workflows/ci.yml)
+[![npm](https://img.shields.io/npm/v/issueforge/alpha)](https://www.npmjs.com/package/issueforge)
+[![node](https://img.shields.io/node/v/issueforge)](https://nodejs.org)
+[![License](https://img.shields.io/badge/license-Apache--2.0-blue)](LICENSE)
+
 Label an issue, and the agent goes to work on it — in an isolated worktree pinned to an exact
 commit, on your machine — then reports what it found back to the issue for you to review.
 

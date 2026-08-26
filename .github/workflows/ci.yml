@@ -38,5 +38,11 @@ jobs:
       # violation) and the cross-process race test, which runs against dist/.
       - run: pnpm test
 
+      # Lints the PUBLISHED package, which no other step here can see: `pnpm check`
+      # type-checks and runs the source, while what reaches a user is the tarball.
+      # It packs the real thing and checks bin paths, exports and file layout —
+      # exactly the class of defect that shipped a bin npm silently strips.
+      - run: pnpm --filter issueforge exec publint
+
       - name: CLI smoke test
         run: node apps/cli/dist/main.js --help

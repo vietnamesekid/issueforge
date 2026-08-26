@@ -1,0 +1,46 @@
+# Publishes the CLI to npm with a provenance attestation.
+#
+# Trusted publishing (OIDC) rather than a long-lived NPM_TOKEN: npm revoked classic
+# tokens, so this is the supported path, and it is what lets npm show the "Provenance"
+# panel linking the tarball back to the exact commit and workflow that built it.
+#
+# Manual dispatch, never on push. A release is a decision, and `prepublishOnly` runs
+# the full check suite before anything reaches the registry.
+name: Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'npm dist-tag to publish under'
+        required: true
+        default: 'alpha'
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      # Required for OIDC trusted publishing and the provenance attestation.
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: pnpm
+          registry-url: 'https://registry.npmjs.org'
+
+      - run: pnpm install --frozen-lockfile
+
+      # npm >=11.5.1 is what supports trusted publishing; the runner's bundled npm
+      # can lag behind it.
+      - run: npm install -g npm@latest
+
+      # `prepublishOnly` runs `pnpm -w check` (typecheck, lint, 287 tests) and
+      # `prepack` copies README/LICENSE into the package.
+      - run: npm publish --provenance --tag "${{ inputs.tag }}"
+        working-directory: apps/cli

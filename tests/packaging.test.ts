@@ -68,6 +68,41 @@ describe('published manifest', () => {
   });
 });
 
+describe('build configuration', () => {
+  const tsup = readFileSync(join(ROOT, 'apps/cli/tsup.config.ts'), 'utf8');
+
+  it('keeps the CommonJS dependencies external', () => {
+    // The bug this test exists for: bundling commander or pino into the ESM output
+    // rewrites their internal require() into a stub, and the CLI dies at first run
+    // with `Dynamic require of "events" is not supported`. Development never sees it
+    // — `node src/main.ts` does not take the bundled path — so only the installed
+    // binary is broken. Measured: bundling saves tens of KB gzipped and costs this.
+    for (const cjs of ['pino', 'commander']) {
+      expect(tsup, `${cjs} must stay external`).toMatch(
+        new RegExp(`external:[^\\]]*'${cjs}'`),
+      );
+    }
+  });
+
+  it('does not minify — stack traces are the product here', () => {
+    // Minifying shrinks the bundle ~42% and renames every frame in a stack trace.
+    // This CLI reports its own failures to users, and tsup, vitest and prisma all
+    // ship unminified for the same reason.
+    expect(tsup).not.toMatch(/minify:\s*true/);
+  });
+});
+
+describe('release workflow', () => {
+  it('publishes with a provenance attestation', () => {
+    // Provenance needs `id-token: write`; without it the publish still succeeds but
+    // silently ships no attestation, and npm shows no Provenance panel. The failure
+    // is invisible until someone looks at the package page.
+    const release = readFileSync(join(ROOT, '.github/workflows/release.yml'), 'utf8');
+    expect(release).toMatch(/id-token:\s*write/);
+    expect(release).toMatch(/--provenance/);
+  });
+});
+
 describe('version', () => {
   it('matches the constant the CLI reports for --version', () => {
     // The bug this test exists for: VERSION is a hand-written constant in main.ts,

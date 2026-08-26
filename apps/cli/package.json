@@ -30,7 +30,8 @@
     "@types/node": "catalog:",
     "@issueforge/adapters": "workspace:*",
     "@issueforge/contracts": "workspace:*",
-    "@issueforge/core": "workspace:*"
+    "@issueforge/core": "workspace:*",
+    "publint": "^0.3.14"
   },
   "description": "Local-first GitHub IssueOps supervisor for coding-agent harnesses",
   "keywords": [
