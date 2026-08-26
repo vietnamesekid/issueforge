@@ -1,5 +1,5 @@
 import { execa, type ResultPromise } from 'execa';
-import type { ProcessOwnership } from '@issueforge/contracts';
+import { optionalDefined, type ProcessOwnership } from '@issueforge/contracts';
 import { currentProcessIdentity } from './identity.js';
 import { killGroup } from './reaper.js';
 import { buildChildEnvironment, type EnvironmentOptions } from './environment.js';
@@ -88,8 +88,8 @@ export function spawnSupervised(
     buffer: false,
     // Required before `iterable({from: 'all'})` will interleave the two streams.
     all: true,
-    ...(options.timeoutMs !== undefined ? { timeout: options.timeoutMs } : {}),
-    ...(options.signal !== undefined ? { cancelSignal: options.signal } : {}),
+    ...optionalDefined('timeout', options.timeoutMs),
+    ...optionalDefined('cancelSignal', options.signal),
   });
 
   const pgid = child.pid;

@@ -1,5 +1,5 @@
 import type { HarnessEvent, HarnessResult } from '@issueforge/contracts';
-import { HarnessResult as HarnessResultSchema } from '@issueforge/contracts';
+import { HarnessResult as HarnessResultSchema, optionalDefined } from '@issueforge/contracts';
 
 /**
  * Translates Claude Code's stream-json into the normalised event union.
@@ -104,7 +104,7 @@ function parseSystem(record: Record<string, unknown>, raw: string): ParsedLine {
     sessionId: asString(record['session_id']) ?? '',
     tools: asStringArray(record['tools']),
     mcpServers: namesOf(record['mcp_servers']),
-    ...(asString(record['model']) !== undefined ? { model: asString(record['model']) as string } : {}),
+    ...optionalDefined('model', asString(record['model'])),
   };
 
   return {
@@ -114,7 +114,7 @@ function parseSystem(record: Record<string, unknown>, raw: string): ParsedLine {
         sessionId: posture.sessionId,
         tools: posture.tools,
         mcpServers: posture.mcpServers,
-        ...(posture.model !== undefined ? { model: posture.model } : {}),
+        ...optionalDefined('model', posture.model),
       },
     ],
     posture,
@@ -139,7 +139,7 @@ function parseAssistant(record: Record<string, unknown>): HarnessEvent[] {
         type: 'tool_started',
         toolId: asString(b['id']) ?? 'unknown',
         name: asString(b['name']) ?? 'unknown',
-        ...(detail !== undefined ? { detail } : {}),
+        ...optionalDefined('detail', detail),
       });
     }
   }
@@ -162,7 +162,7 @@ function parseToolResults(record: Record<string, unknown>): HarnessEvent[] {
       type: 'tool_finished',
       toolId: asString(b['tool_use_id']) ?? 'unknown',
       ok: b['is_error'] !== true,
-      ...(output !== undefined ? { output } : {}),
+      ...optionalDefined('output', output),
     });
   }
 
@@ -180,9 +180,12 @@ function parseResult(line: ResultLine): ParsedLine {
   const events: HarnessEvent[] = denials.map((denial) => ({
     type: 'permission_denied' as const,
     tool: denial.tool_name ?? 'unknown',
-    ...(denial.tool_input?.['file_path'] !== undefined
-      ? { target: String(denial.tool_input['file_path']) }
-      : {}),
+    ...optionalDefined(
+      'target',
+      denial.tool_input?.['file_path'] === undefined
+        ? undefined
+        : String(denial.tool_input['file_path']),
+    ),
   }));
 
   if (line.total_cost_usd !== undefined) {
@@ -194,7 +197,7 @@ function parseResult(line: ResultLine): ParsedLine {
       ? {
           type: 'finished',
           finalText,
-          ...(line.structured_output !== undefined ? { structured: line.structured_output } : {}),
+          ...optionalDefined('structured', line.structured_output),
         }
       : { type: 'failed', message: finalText || (line.subtype ?? 'harness reported failure') },
   );
@@ -208,8 +211,8 @@ function parseResult(line: ResultLine): ParsedLine {
       structured: line.structured_output,
       denials: denials.length,
       injectionSuspected: INJECTION_HINT.test(finalText),
-      ...(line.total_cost_usd !== undefined ? { costUsd: line.total_cost_usd } : {}),
-      ...(line.num_turns !== undefined ? { turns: line.num_turns } : {}),
+      ...optionalDefined('costUsd', line.total_cost_usd),
+      ...optionalDefined('turns', line.num_turns),
     },
   };
 }

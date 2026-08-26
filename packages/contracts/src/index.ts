@@ -9,3 +9,4 @@ export * from './evidence.js';
 export * from './run.js';
 export * from './config.js';
 export * from './github.js';
+export * from './optional.js';

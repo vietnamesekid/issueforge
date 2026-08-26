@@ -1,6 +1,8 @@
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 
+import { optionalDefined } from '@issueforge/contracts';
+
 const execFileAsync = promisify(execFile);
 
 /**
@@ -35,7 +37,7 @@ export async function git(
 ): Promise<{ stdout: string; stderr: string }> {
   try {
     const result = await execFileAsync('git', [...args], {
-      ...(options.cwd !== undefined ? { cwd: options.cwd } : {}),
+      ...optionalDefined('cwd', options.cwd),
       timeout: options.timeoutMs ?? 120_000,
       maxBuffer: 32 * 1024 * 1024,
       encoding: 'utf8',

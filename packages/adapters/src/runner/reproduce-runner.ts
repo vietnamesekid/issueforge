@@ -2,11 +2,13 @@ import { randomUUID } from 'node:crypto';
 import { writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type {
-  HarnessRunOutcome,
-  IssueForgeConfig,
-  RunId,
-  RunState,
-  Sha,
+  IssueForgeConfig} from '@issueforge/contracts';
+import {
+  optionalDefined,
+  type HarnessRunOutcome,
+  type RunId,
+  type RunState,
+  type Sha,
 } from '@issueforge/contracts';
 import {
   buildReproduceCard,
@@ -50,6 +52,13 @@ export interface ReproduceRequest {
   issue: { number: number; title: string; body: string };
   remote: string;
   baseSha: Sha;
+  /**
+   * Lets the harness report its own findings to the issue.
+   *
+   * Passed through rather than used here: IssueForge sets the run up, the harness
+   * says what it found, and a human reviews it.
+   */
+  githubToken?: string;
 }
 
 export interface ReproduceResult {
@@ -123,7 +132,7 @@ export class ReproduceRunner {
       // forever. The workspace outlives the lock deliberately — its contents are the
       // evidence, and retention removes them later.
       store.releaseLock({ repo: request.repo, issueNumber: request.issueNumber });
-      if (workspace !== undefined) {
+      if (workspace) {
         logger.debug({ path: workspace.path }, 'workspace retained for evidence');
       }
     }
@@ -176,6 +185,7 @@ export class ReproduceRunner {
       taskCardPath,
       resultSchema: REPRODUCE_RESULT_SCHEMA,
       sessionId: randomUUID(),
+      ...optionalDefined('githubToken', request.githubToken),
     });
 
     // Immediately, before awaiting anything. A supervisor killed mid-run cannot write
@@ -242,8 +252,8 @@ export class ReproduceRunner {
     store.finishAttempt(runId, {
       outcome: toTaskOutcome(classification.status),
       endedAt: Date.now(),
-      ...(outcome?.exitCode !== undefined ? { exitCode: outcome.exitCode } : {}),
-      ...(outcome?.costUsd !== undefined ? { costUsd: outcome.costUsd } : {}),
+      ...optionalDefined('exitCode', outcome?.exitCode),
+      ...optionalDefined('costUsd', outcome?.costUsd),
     });
 
     store.updateRun(runId, { status: classification.status, detail: classification.detail });
@@ -252,16 +262,17 @@ export class ReproduceRunner {
       runId,
       status: classification.status,
       detail: classification.detail,
-      ...(outcome !== undefined ? { outcome } : {}),
+      ...optionalDefined('outcome', outcome),
     };
   }
 }
 
 /**
- * What the harness must return.
+ * What the harness returns.
  *
- * Only a claim. Whether it holds is settled by replaying the evidence (IF-010), so
- * nothing here is treated as a verdict.
+ * A summary for the ledger, so `issueforge status` can say what happened without
+ * reading a transcript. The harness reports its actual findings to the issue itself,
+ * where a human reads them — this is bookkeeping, not adjudication.
  */
 const REPRODUCE_RESULT_SCHEMA = {
   type: 'object',
@@ -277,9 +288,7 @@ const REPRODUCE_RESULT_SCHEMA = {
       type: 'array',
       items: { type: 'string' },
       description:
-        'What must run first in a CLEAN checkout for reproCommand to work — an install, ' +
-        'a build, whatever this repository needs. Argv array, e.g. ["pnpm","install"]. ' +
-        'Omit only if reproCommand works with nothing installed.',
+        'What a maintainer must run first for reproCommand to work in a clean checkout.',
     },
     expectedSignal: { type: 'string' },
     summary: { type: 'string' },

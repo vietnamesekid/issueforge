@@ -7,39 +7,32 @@ import type {
   HarnessCapabilities,
   HarnessEvent,
   HarnessRunOutcome,
+  IssueForgeConfig,
   ProcessOwnership,
   Sha,
 } from '@issueforge/contracts';
 import { IssueForgeConfig as ConfigSchema } from '@issueforge/contracts';
-import { validateReproduction, type HarnessAdapter, type HarnessRun } from '@issueforge/core';
+import { HarnessContractError, type HarnessAdapter, type HarnessRun } from '@issueforge/core';
 import {
   GitWorkspaceManager,
-  FileDefectToggle,
-  ProcessReplayer,
   ReproduceRunner,
   SqliteRunStore,
   createLogger,
   reapOrphans,
 } from '@issueforge/adapters';
-import {
-  BUGGY_SOURCE,
-  FIXED_SOURCE,
-  GENUINE_REPRO,
-  TRIVIAL_REPRO,
-  UNRELATED_FAILURE,
-  buildOrigin,
-} from '../fixtures/build-fixture.js';
+import { BUGGY_SOURCE, GENUINE_REPRO, buildOrigin } from '../fixtures/build-fixture.js';
 
 /**
- * The v0.1 vertical slice, end to end.
+ * The v0.1 slice, end to end.
  *
- * Every component is real — ledger, workspace, supervisor, runner, validator — and
- * only the harness is scripted, because a live run costs money and needs a login
- * while proving nothing these cases do not.
+ * What this proves is ORCHESTRATION: a task reaches a harness with a workspace pinned
+ * to the right commit, the run is recorded so it survives being killed, the issue lock
+ * is held and released, and no processes are left behind.
  *
- * The point is NOT that a reproduction succeeds. It is that an unsupported claim is
- * REJECTED: a green end-to-end test exercising only the happy path would prove
- * nothing about a product whose entire claim is that it does not trust its agent.
+ * It deliberately does not judge the harness's findings. Those go to the issue, where
+ * a human reviews them — an earlier design replayed the evidence here and rejected a
+ * correct reproduction three separate times in live runs, each because a free agent
+ * had chosen a form the check did not anticipate.
  */
 
 let dir: string;
@@ -49,24 +42,27 @@ let baseSha: Sha;
 let store: SqliteRunStore;
 
 const REPO = 'owner/fixture';
-/** Paths nothing may write, whatever the harness decides. */
-const NEVER_WRITABLE_EXAMPLES = ['.github/workflows/ci.yml', '.git/config', '.env'];
-const config = ConfigSchema.parse({});
+const config: IssueForgeConfig = ConfigSchema.parse({});
 const logger = createLogger({ level: 'fatal' });
 
-/** A harness that writes chosen files and returns a chosen claim. */
+/** A harness under the test's control, standing in for a real one. */
 class ScriptedHarness implements HarnessAdapter {
   readonly name = 'claude-code' as const;
   files: Record<string, string> = {};
   claim: Record<string, unknown> | undefined;
   ok = true;
+  failure: Error | undefined;
+  observedCwd: string | undefined;
+  observedToken: string | undefined;
 
   async detect(): Promise<HarnessCapabilities> {
     return { installed: true, version: 'scripted', authenticated: true };
   }
 
-  run(request: { cwd: string }): HarnessRun {
-    // Write what the "agent" produced, exactly where a real one would.
+  run(request: { cwd: string; githubToken?: string }): HarnessRun {
+    this.observedCwd = request.cwd;
+    this.observedToken = request.githubToken;
+
     for (const [relative, contents] of Object.entries(this.files)) {
       const path = join(request.cwd, relative);
       mkdirSync(dirname(path), { recursive: true });
@@ -75,7 +71,7 @@ class ScriptedHarness implements HarnessAdapter {
 
     const events: HarnessEvent[] = [
       { type: 'session_started', sessionId: 'e2e', tools: ['Read', 'Write'], mcpServers: [] },
-      { type: 'text', text: 'wrote a regression test' },
+      { type: 'text', text: 'looked at the code' },
     ];
     const outcome: HarnessRunOutcome = {
       harness: 'claude-code',
@@ -92,18 +88,23 @@ class ScriptedHarness implements HarnessAdapter {
       ownerStart: 'scripted',
       startedAt: Date.now(),
     };
+    const failure = this.failure;
 
     return {
       pgid: ownership.pgid,
       ownership,
       async *events() { for (const event of events) yield event; },
-      async outcome() { return outcome; },
+      async outcome() {
+        if (failure !== undefined) throw failure;
+        return outcome;
+      },
       cancel() {},
     };
   }
 }
 
 let harness: ScriptedHarness;
+let runner: ReproduceRunner;
 
 beforeEach(() => {
   dir = mkdtempSync(join(tmpdir(), 'if-e2e-'));
@@ -114,21 +115,7 @@ beforeEach(() => {
   store = new SqliteRunStore(join(root, 'state.db'));
   store.migrate();
   harness = new ScriptedHarness();
-});
-
-afterEach(() => {
-  try { store.close(); } catch { /* already closed */ }
-  rmSync(dir, { recursive: true, force: true });
-});
-
-/** The whole path: run the task, then replay its evidence independently. */
-async function reproduceAndValidate(defect?: FileDefectToggle): Promise<{
-  runId: string;
-  verdict: string;
-  why: string;
-  workdir: string;
-}> {
-  const runner = new ReproduceRunner({
+  runner = new ReproduceRunner({
     store,
     workspaces: new GitWorkspaceManager(root),
     harness,
@@ -136,8 +123,15 @@ async function reproduceAndValidate(defect?: FileDefectToggle): Promise<{
     logger,
     root,
   });
+});
 
-  const result = await runner.run({
+afterEach(() => {
+  try { store.close(); } catch { /* already closed */ }
+  rmSync(dir, { recursive: true, force: true });
+});
+
+const reproduce = (githubToken?: string) =>
+  runner.run({
     repo: REPO,
     issueNumber: 7,
     issue: {
@@ -147,168 +141,96 @@ async function reproduceAndValidate(defect?: FileDefectToggle): Promise<{
     },
     remote: origin,
     baseSha,
+    ...(githubToken !== undefined ? { githubToken } : {}),
   });
 
-  const run = store.getRun(result.runId);
-  const workdir = run?.workdir ?? '';
-  const claim = result.outcome?.result;
+const claimed = {
+  verdict: 'reproduced',
+  reproCommand: ['node', '--test', 'test/repro.test.js'],
+  testFile: 'test/repro.test.js',
+  summary: 'the value is truncated at the second "="',
+};
 
-  if (claim === undefined) {
-    return { runId: result.runId, verdict: result.status, why: result.detail, workdir };
-  }
+describe('v0.1 slice — orchestration', { timeout: 120_000 }, () => {
+  it('hands the harness a workspace pinned to the requested commit', async () => {
+    harness.claim = claimed;
+    const result = await reproduce();
 
-  const validation = await validateReproduction({
-    claim,
-    cwd: workdir,
-    baseSha,
-    headSha: execFileSync('git', ['rev-parse', 'HEAD'], { cwd: workdir, encoding: 'utf8' }).trim() as Sha,
-    changedFiles: execFileSync('git', ['status', '--porcelain'], { cwd: workdir, encoding: 'utf8' })
-      .split('\n')
-      .filter((l) => l.trim())
-      .map((l) => l.slice(3).trim()),
-    readArtifact: (path) => {
-      try { return readFileSync(join(workdir, path), 'utf8'); } catch { return null; }
-    },
-    replayer: new ProcessReplayer(),
-    timeoutMs: 30_000,
-    ...(defect !== undefined ? { defect } : {}),
-  });
-
-  store.updateRun(result.runId, { status: validation.verdict, detail: validation.why });
-  return { runId: result.runId, verdict: validation.verdict, why: validation.why, workdir };
-}
-
-describe('v0.1 vertical slice', { timeout: 120_000 }, () => {
-  it('confirms a genuine reproduction of a real bug', async () => {
-    harness.files = { 'test/repro.test.js': GENUINE_REPRO };
-    harness.claim = {
-      verdict: 'reproduced',
-      reproCommand: ['node', '--test', 'test/repro.test.js'],
-      testFile: 'test/repro.test.js',
-      summary: 'the value is truncated at the second "="',
-    };
-
-    const { runId, verdict, workdir } = await reproduceAndValidate();
-
-    expect(verdict).toBe('reproduced');
-
-    // The whole ledger tells a coherent story afterwards.
-    const run = store.getRun(runId);
-    expect(run?.status).toBe('reproduced');
-    expect(run?.baseSha).toBe(baseSha);
-    expect(store.listAttempts(runId)).toHaveLength(1);
-    expect(store.listAttempts(runId)[0]?.costUsd).toBe(0.31);
-
-    // The transcript survives the run.
-    expect(existsSync(join(root, 'runs', runId, 'events.jsonl'))).toBe(true);
-
-    // The workspace is pinned, and the evidence is still there to inspect.
+    const workdir = store.getRun(result.runId)?.workdir ?? '';
+    expect(harness.observedCwd).toBe(workdir);
     expect(execFileSync('git', ['rev-parse', 'HEAD'], { cwd: workdir, encoding: 'utf8' }).trim()).toBe(
       baseSha,
     );
+    // The bug is present at this commit — the point of pinning.
     expect(readFileSync(join(workdir, 'src', 'parse.js'), 'utf8')).toBe(BUGGY_SOURCE);
   });
 
-  it('REJECTS a claim when the bug is not actually present', async () => {
-    // The adversarial case, and the reason this product exists. The agent asserts a
-    // reproduction; the code is already correct; the claim must not survive.
-    rmSync(origin, { recursive: true, force: true });
-    baseSha = buildOrigin(origin, FIXED_SOURCE) as Sha;
+  it('gives the harness the issue as data in a file, never as a command line', async () => {
+    harness.claim = claimed;
+    const result = await reproduce();
+    const workdir = store.getRun(result.runId)?.workdir ?? '';
 
-    harness.files = { 'test/repro.test.js': GENUINE_REPRO };
-    harness.claim = {
-      verdict: 'reproduced',
-      reproCommand: ['node', '--test', 'test/repro.test.js'],
-      testFile: 'test/repro.test.js',
-      summary: 'claims a bug that is not there',
+    const card = JSON.parse(readFileSync(join(workdir, 'task-card.json'), 'utf8')) as {
+      issue: { body: string };
+      instructions: string;
     };
-
-    const { runId, verdict, why } = await reproduceAndValidate();
-
-    expect(verdict).toBe('cannot-reproduce');
-    expect(why).toMatch(/PASSED on the pinned base/);
-    expect(store.getRun(runId)?.status).toBe('cannot-reproduce');
+    expect(card.issue.body).toContain('url=http://x?a=1');
+    expect(card.instructions).toMatch(/UNTRUSTED/);
   });
 
-  it('marks the differential as unproven when no fix is available to diff against', async () => {
-    // Replay alone cannot separate a genuine reproduction from a failure that has
-    // nothing to do with the bug — both simply fail. With no fix to remove the
-    // defect, the gap is recorded rather than papered over: the verdict stands, but
-    // the check is visibly unproven.
-    harness.files = { 'test/repro.test.js': UNRELATED_FAILURE };
-    harness.claim = {
-      verdict: 'reproduced',
-      reproCommand: ['node', '--test', 'test/repro.test.js'],
-      testFile: 'test/repro.test.js',
-      summary: 'unrelated assertion',
-    };
-
-    const { why } = await reproduceAndValidate();
-
-    expect(why).toMatch(/differential check not available/);
+  it('lets the harness report its own findings', async () => {
+    // It posts to the issue itself; IssueForge passes the token and stays out of it.
+    harness.claim = claimed;
+    await reproduce('gh_token_for_this_run');
+    expect(harness.observedToken).toBe('gh_token_for_this_run');
   });
 
-  it('REJECTS an unrelated failure once a fix IS available to diff against', async () => {
-    // The case nothing else catches. The test really fails, and keeps failing after
-    // the defect is removed — so it never demonstrated the reported bug at all.
-    harness.files = { 'test/repro.test.js': UNRELATED_FAILURE };
-    harness.claim = {
-      verdict: 'reproduced',
-      reproCommand: ['node', '--test', 'test/repro.test.js'],
-      testFile: 'test/repro.test.js',
-      summary: 'unrelated assertion',
-    };
-
-    const { verdict, why } = await reproduceAndValidate(
-      new FileDefectToggle(new Map([['src/parse.js', FIXED_SOURCE]])),
-    );
-
-    expect(verdict).toBe('cannot-reproduce');
-    expect(why).toMatch(/does not isolate the reported bug/);
+  it('does not second-guess what the harness concluded', async () => {
+    // A verdict of cannot-reproduce is recorded as-is. Adjudicating it is the
+    // reviewer's job, and three live runs showed us getting that wrong.
+    harness.claim = { ...claimed, verdict: 'cannot-reproduce', summary: 'no repro steps given' };
+    const result = await reproduce();
+    expect(result.outcome?.result?.verdict).toBe('cannot-reproduce');
   });
 
-  it('confirms a genuine reproduction THROUGH the differential check', async () => {
-    // Fails on the bug, passes without it — the strongest evidence available.
-    harness.files = { 'test/repro.test.js': GENUINE_REPRO };
-    harness.claim = {
-      verdict: 'reproduced',
-      reproCommand: ['node', '--test', 'test/repro.test.js'],
-      testFile: 'test/repro.test.js',
-      summary: 'truncation at the second "="',
-    };
+  it('records the run so it survives the process being killed', async () => {
+    harness.claim = claimed;
+    const result = await reproduce();
 
-    const { verdict, why, workdir } = await reproduceAndValidate(
-      new FileDefectToggle(new Map([['src/parse.js', FIXED_SOURCE]])),
-    );
-
-    expect(verdict).toBe('reproduced');
-    expect(why).toMatch(/disappears once the defect is removed/);
-    // The workspace is the evidence, so the defect must be back afterwards.
-    expect(readFileSync(join(workdir, 'src', 'parse.js'), 'utf8')).toBe(BUGGY_SOURCE);
+    const run = store.getRun(result.runId);
+    expect(run?.baseSha).toBe(baseSha);
+    expect(run?.harness).toBe('claude-code');
+    expect(store.listAttempts(result.runId)).toHaveLength(1);
+    expect(store.listAttempts(result.runId)[0]?.costUsd).toBe(0.31);
+    expect(existsSync(join(root, 'runs', result.runId, 'events.jsonl'))).toBe(true);
   });
 
-  it('REJECTS a reproduction script that only exits non-zero', async () => {
-    // Inside the allowed paths, so the write boundary lets it through and the
-    // validator is the one that judges it — which is the layer that should.
-    harness.files = { 'test/repro.sh': TRIVIAL_REPRO };
-    harness.claim = {
-      verdict: 'reproduced',
-      reproCommand: ['sh', 'test/repro.sh'],
-      summary: 'lazy repro',
-    };
+  it('streams the transcript while the run is live', async () => {
+    // A run killed mid-flight must still show how far it got.
+    harness.claim = claimed;
+    const result = await reproduce();
 
-    const { verdict, why } = await reproduceAndValidate();
-
-    expect(verdict).toBe('cannot-reproduce');
-    expect(why).toMatch(/does nothing but exit/);
+    const lines = readFileSync(join(root, 'runs', result.runId, 'events.jsonl'), 'utf8')
+      .trim()
+      .split('\n');
+    expect(lines).toHaveLength(2);
+    expect(JSON.parse(lines[0] as string)).toMatchObject({ type: 'session_started' });
   });
 
-  it('lets the harness write wherever the work needs, including source', () => {
-    // Where the work goes is the harness's decision. It may need to touch source to
-    // demonstrate a problem, and second-guessing that is how we broke the first live
-    // run. What it produces is judged by replaying the evidence, not by inspecting
-    // which files moved.
-    expect(NEVER_WRITABLE_EXAMPLES).not.toContain('src/parse.js');
+  it('releases the issue so a retry can take it, and keeps the earlier run', async () => {
+    harness.claim = claimed;
+    const first = await reproduce();
+    expect(store.getLock({ repo: REPO, issueNumber: 7 })).toBeNull();
+
+    const second = await reproduce();
+    expect(second.runId).not.toBe(first.runId);
+    expect(store.listRuns({ repo: REPO, issueNumber: 7 })).toHaveLength(2);
+  });
+
+  it('releases the lock even when the harness throws', async () => {
+    harness.failure = new Error('harness exploded');
+    await reproduce();
+    expect(store.getLock({ repo: REPO, issueNumber: 7 })).toBeNull();
   });
 
   it('BLOCKS a run that touched .github, whatever else it did', async () => {
@@ -318,80 +240,27 @@ describe('v0.1 vertical slice', { timeout: 120_000 }, () => {
       'test/repro.test.js': GENUINE_REPRO,
       '.github/workflows/ci.yml': 'name: pwned\n',
     };
-    harness.claim = {
-      verdict: 'reproduced',
-      reproCommand: ['node', '--test', 'test/repro.test.js'],
-      testFile: 'test/repro.test.js',
-      summary: 's',
-    };
+    harness.claim = claimed;
 
-    const { verdict, why } = await reproduceAndValidate();
+    const result = await reproduce();
 
-    expect(verdict).toBe('blocked');
-    expect(why).toContain('.github/workflows/ci.yml');
+    expect(result.status).toBe('blocked');
+    expect(result.detail).toContain('.github/workflows/ci.yml');
   });
 
-  it('reports needs-info when the harness returns no claim at all', async () => {
-    harness.claim = undefined;
+  it('treats a contract breach as blocked, not as a finding about the bug', async () => {
+    harness.failure = new HarnessContractError('harness started with MCP servers enabled');
+    const result = await reproduce();
 
-    const { verdict } = await reproduceAndValidate();
-
-    expect(verdict).toBe('needs-info');
+    expect(result.status).toBe('blocked');
+    expect(result.detail).toMatch(/MCP servers/);
   });
 
   it('leaves no orphaned processes behind', async () => {
-    // The failure mode that made process supervision the riskiest task.
-    harness.files = { 'test/repro.test.js': GENUINE_REPRO };
-    harness.claim = {
-      verdict: 'reproduced',
-      reproCommand: ['node', '--test', 'test/repro.test.js'],
-      testFile: 'test/repro.test.js',
-      summary: 's',
-    };
-
-    await reproduceAndValidate();
+    harness.claim = claimed;
+    await reproduce();
 
     expect(store.listReapCandidates()).toHaveLength(0);
     expect(reapOrphans(store)).toEqual([]);
-  });
-
-  it('releases the issue so a second run can take it', async () => {
-    harness.files = { 'test/repro.test.js': GENUINE_REPRO };
-    harness.claim = {
-      verdict: 'reproduced',
-      reproCommand: ['node', '--test', 'test/repro.test.js'],
-      testFile: 'test/repro.test.js',
-      summary: 's',
-    };
-
-    const first = await reproduceAndValidate();
-    expect(store.getLock({ repo: REPO, issueNumber: 7 })).toBeNull();
-
-    const second = await reproduceAndValidate();
-    expect(second.runId).not.toBe(first.runId);
-    // Both runs remain readable: a retry adds history rather than erasing it.
-    expect(store.listRuns({ repo: REPO, issueNumber: 7 })).toHaveLength(2);
-  });
-
-  it('never lets attacker-authored text reach a command line', async () => {
-    // The issue body is carried verbatim as data. The defence is that it lives in a
-    // file the harness reads, not that it was sanitised on the way in.
-    harness.files = { 'test/repro.test.js': GENUINE_REPRO };
-    harness.claim = {
-      verdict: 'reproduced',
-      reproCommand: ['node', '--test', 'test/repro.test.js'],
-      testFile: 'test/repro.test.js',
-      summary: 's',
-    };
-
-    const { workdir } = await reproduceAndValidate();
-    const card = JSON.parse(readFileSync(join(workdir, 'task-card.json'), 'utf8')) as {
-      issue: { body: string };
-      instructions: string;
-    };
-
-    expect(card.issue.body).toContain('url=http://x?a=1');
-    expect(card.instructions).toMatch(/UNTRUSTED/);
-    expect(existsSync('/tmp/if-e2e-pwned')).toBe(false);
   });
 });

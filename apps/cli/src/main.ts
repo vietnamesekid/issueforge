@@ -4,7 +4,7 @@ import type { Sha } from '@issueforge/contracts';
 import { reapOrphans } from '@issueforge/adapters';
 import { createContext } from './context.js';
 import { NotOurLabelError, parseEventFile } from './commands/handle-github-event.js';
-import { runReproduce } from './commands/run-reproduce.js';
+import { runReproduceTask } from './commands/run-task.js';
 import { collectStatus, renderStatusTable } from './commands/status.js';
 import { hasBlockingProblem, renderDoctor, runDoctor } from './commands/doctor.js';
 import { renderInit, runInit } from './commands/init.js';
@@ -74,7 +74,7 @@ export function buildProgram(): Command {
       }
 
       const context = createContext();
-      const result = await runReproduce(context, {
+      const result = await runReproduceTask(context, {
         repo: event.repo,
         issueNumber: event.issueNumber,
         issue: event.issue,
@@ -82,9 +82,9 @@ export function buildProgram(): Command {
         // The `issues` event carries no issue-specific SHA, so the pinned commit is
         // resolved from the default branch and recorded on the run.
         baseSha: resolveBaseSha(event.repo, event.defaultBranch),
-        publish: true,
+        // Passed through so the harness can report its findings on the issue.
         ...(process.env['ISSUEFORGE_GITHUB_TOKEN'] !== undefined
-          ? { token: process.env['ISSUEFORGE_GITHUB_TOKEN'] }
+          ? { githubToken: process.env['ISSUEFORGE_GITHUB_TOKEN'] }
           : {}),
       });
 
@@ -125,13 +125,15 @@ export function buildProgram(): Command {
         const context = createContext();
         const remote = options.remote ?? `https://github.com/${options.repo}.git`;
 
-        const result = await runReproduce(context, {
+        const result = await runReproduceTask(context, {
           repo: options.repo,
           issueNumber: options.issue,
           issue: { number: options.issue, title: options.title, body: options.body },
           remote,
           baseSha: (options.baseSha ?? resolveBaseSha(options.repo, 'HEAD')) as Sha,
-          publish: options.publish,
+          ...(options.publish && process.env['ISSUEFORGE_GITHUB_TOKEN'] !== undefined
+            ? { githubToken: process.env['ISSUEFORGE_GITHUB_TOKEN'] }
+            : {}),
         });
 
         report(result, options.json === true);
@@ -255,9 +257,9 @@ export function buildProgram(): Command {
   return program;
 }
 
-function report(result: { runId: string; status: string; why: string }, json: boolean): void {
+function report(result: { runId: string; status: string; detail: string }, json: boolean): void {
   if (json) emit(result);
-  else process.stdout.write(`${result.status}: ${result.why}\n`);
+  else process.stdout.write(`${result.status}: ${result.detail}\n`);
 
   process.exitCode =
     result.status === 'blocked'

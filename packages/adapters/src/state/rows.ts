@@ -5,7 +5,7 @@ import type {
   RunState,
   TaskAttempt,
 } from '@issueforge/contracts';
-import { RunState as RunStateSchema } from '@issueforge/contracts';
+import { RunState as RunStateSchema, optional } from '@issueforge/contracts';
 
 /**
  * The boundary between SQL rows and domain types.
@@ -62,17 +62,6 @@ export interface ArtifactRow {
   checksum: string | null;
   bytes: number | null;
   created_at: number;
-}
-
-/**
- * Include a key only when the column held a value.
- *
- * SQL has one absence (`NULL`); the domain types distinguish "absent" from "present
- * and null" via optional properties, and `exactOptionalPropertyTypes` enforces that.
- * This is the one translation between the two.
- */
-function optional<K extends string, V>(key: K, value: V | null): Record<K, V> | Record<string, never> {
-  return value === null ? {} : ({ [key]: value } as Record<K, V>);
 }
 
 /**

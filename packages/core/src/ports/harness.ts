@@ -51,6 +51,13 @@ export interface HarnessRunRequest {
   resultSchema: unknown;
   /** Correlates the harness session with the run for later diagnosis. */
   sessionId: string;
+  /**
+   * Token for reporting back to GitHub.
+   *
+   * The harness posts its own findings — it knows the repository's conventions and a
+   * human reviews everything it writes. Absent for a local run with no GitHub side.
+   */
+  githubToken?: string;
   signal?: AbortSignal;
 }
 

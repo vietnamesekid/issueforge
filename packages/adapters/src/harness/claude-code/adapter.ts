@@ -1,6 +1,12 @@
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import type { HarnessCapabilities, HarnessEvent, HarnessRunOutcome } from '@issueforge/contracts';
+import {
+  optional,
+  optionalDefined,
+  type HarnessCapabilities,
+  type HarnessEvent,
+  type HarnessRunOutcome,
+} from '@issueforge/contracts';
 import { HarnessContractError, type HarnessAdapter, type HarnessRun, type HarnessRunRequest } from '@issueforge/core';
 import { spawnSupervised, type SupervisedProcess } from '../../process/index.js';
 import { buildClaudeArgv } from './argv.js';
@@ -58,11 +64,16 @@ export class ClaudeCodeAdapter implements HarnessAdapter {
       // authentication this product is built to reuse. Naming it explicitly is what
       // makes it an allowed exception to the environment allowlist.
       env: {
-        ...(process.env['ANTHROPIC_API_KEY'] !== undefined
-          ? { extra: { ANTHROPIC_API_KEY: process.env['ANTHROPIC_API_KEY'] } }
-          : {}),
+        extra: {
+          ...optionalDefined('ANTHROPIC_API_KEY', process.env['ANTHROPIC_API_KEY']),
+          // The harness reports its own findings, so it needs to reach GitHub. This is
+          // the job's own token: scoped to this repository, valid for this run, and
+          // named explicitly here rather than inherited — the environment allowlist
+          // still blocks everything else.
+          ...optionalDefined('GH_TOKEN', request.githubToken),
+        },
       },
-      ...(request.signal !== undefined ? { signal: request.signal } : {}),
+      ...optionalDefined('signal', request.signal),
     });
 
     return new ClaudeCodeRun(child);
@@ -111,16 +122,16 @@ class ClaudeCodeRun implements HarnessRun {
     for await (const line of this.#child.lines()) {
       const parsed = parseLine(line);
 
-      if (parsed.posture !== undefined) {
+      if (parsed.posture) {
         this.#posture = parsed.posture;
         this.#postureError = checkPosture(parsed.posture);
         // Abort BEFORE the model spends anything. The first event reports the sandbox
         // we actually got, and proceeding on a sandbox we did not ask for would mean
         // running an untrusted issue body against tools we thought were disabled.
-        if (this.#postureError !== undefined) this.#child.terminate();
+        if (this.#postureError) this.#child.terminate();
       }
 
-      if (parsed.terminal !== undefined) this.#terminal = parsed.terminal;
+      if (parsed.terminal) this.#terminal = parsed.terminal;
 
       yield* parsed.events;
     }
@@ -129,7 +140,7 @@ class ClaudeCodeRun implements HarnessRun {
   async outcome(): Promise<HarnessRunOutcome> {
     const result = await this.#child.wait();
 
-    if (this.#postureError !== undefined) {
+    if (this.#postureError) {
       throw new HarnessContractError(this.#postureError);
     }
 
@@ -143,10 +154,12 @@ class ClaudeCodeRun implements HarnessRun {
       ok: terminal?.ok === true,
       denials: terminal?.denials ?? 0,
       injectionSuspected: terminal?.injectionSuspected ?? false,
-      ...(this.#posture?.sessionId ? { sessionId: this.#posture.sessionId } : {}),
-      ...(claim !== null ? { result: claim } : {}),
-      ...(result.exitCode !== null ? { exitCode: result.exitCode } : {}),
-      ...(terminal?.costUsd !== undefined ? { costUsd: terminal.costUsd } : {}),
+      ...optional('sessionId', this.#posture?.sessionId),
+      ...optional('result', claim),
+      // `optional`, not a truthiness check: exit code 0 is the most common one there
+      // is, and `&&` would silently drop it.
+      ...optional('exitCode', result.exitCode),
+      ...optionalDefined('costUsd', terminal?.costUsd),
     };
   }
 
