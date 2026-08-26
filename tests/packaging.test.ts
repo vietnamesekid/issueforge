@@ -93,6 +93,24 @@ describe('build configuration', () => {
 });
 
 describe('release workflow', () => {
+  it('builds before publishing', () => {
+    // The bug this test exists for: the workflow relied on `prepublishOnly` reaching
+    // `pnpm build` three scripts deep, via `pnpm check` -> `pnpm test` -> `pnpm build`.
+    // A fresh clone has no dist/, and `files` limits the tarball to dist/ — so if that
+    // chain ever breaks, npm publishes a package whose bin points at a file that does
+    // not exist. It installs fine and then cannot run at all.
+    const release = readFileSync(join(ROOT, '.github/workflows/release.yml'), 'utf8');
+    const build = release.indexOf('pnpm build');
+    const publish = release.indexOf('npm publish');
+    expect(build, 'workflow must run `pnpm build`').toBeGreaterThan(-1);
+    expect(build, '`pnpm build` must come before `npm publish`').toBeLessThan(publish);
+  });
+
+  it('verifies the built binary before publishing it', () => {
+    const release = readFileSync(join(ROOT, '.github/workflows/release.yml'), 'utf8');
+    expect(release).toMatch(/dist\/main\.js --version/);
+  });
+
   it('publishes with a provenance attestation', () => {
     // Provenance needs `id-token: write`; without it the publish still succeeds but
     // silently ships no attestation, and npm shows no Provenance panel. The failure

@@ -238,9 +238,10 @@ npm install -g issueforge@alpha
 issueforge doctor
 ```
 
-It is published under the `alpha` dist-tag deliberately, so a plain `npm install -g issueforge`
-does **not** resolve to it. Installing pre-alpha software that spawns coding agents on your
-machine should be something you opt into by name.
+Install by name, with `@alpha`. npm points `latest` at the only published version, so a bare
+`npm install -g issueforge` currently resolves to this same pre-alpha build rather than failing —
+`latest` will move to the first stable release and stop shadowing it. Until then, treat `@alpha`
+as the honest name for what you are getting: software that spawns coding agents on your machine.
 
 Requires **Node.js >= 22.13** (see [Requirements](#requirements)). `issueforge doctor` checks
 every dependency a run needs and tells you how to fix whatever is missing — run it first.

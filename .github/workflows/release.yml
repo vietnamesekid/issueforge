@@ -1,11 +1,10 @@
 # Publishes the CLI to npm with a provenance attestation.
 #
-# Trusted publishing (OIDC) rather than a long-lived NPM_TOKEN: npm revoked classic
-# tokens, so this is the supported path, and it is what lets npm show the "Provenance"
-# panel linking the tarball back to the exact commit and workflow that built it.
+# Trusted publishing (OIDC) rather than a long-lived NPM_TOKEN: npm restricted tokens
+# that bypass 2FA, so this is the supported path, and it is what lets npm show the
+# "Provenance" panel linking the tarball back to the exact commit that built it.
 #
-# Manual dispatch, never on push. A release is a decision, and `prepublishOnly` runs
-# the full check suite before anything reaches the registry.
+# Manual dispatch, never on push. A release is a decision.
 name: Release
 
 on:
@@ -15,6 +14,11 @@ on:
         description: 'npm dist-tag to publish under'
         required: true
         default: 'alpha'
+        type: choice
+        options:
+          - alpha
+          - beta
+          - latest
 
 jobs:
   publish:
@@ -22,6 +26,8 @@ jobs:
     permissions:
       contents: read
       # Required for OIDC trusted publishing and the provenance attestation.
+      # Without it the publish still succeeds but ships NO attestation, and the
+      # failure is invisible until someone looks at the package page.
       id-token: write
     steps:
       - uses: actions/checkout@v4
@@ -36,11 +42,43 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
-      # npm >=11.5.1 is what supports trusted publishing; the runner's bundled npm
-      # can lag behind it.
+      # Trusted publishing needs npm >=11.5.1. The runner's bundled npm can lag,
+      # and an older one fails with a confusing auth error rather than naming the
+      # real cause.
       - run: npm install -g npm@latest
 
-      # `prepublishOnly` runs `pnpm -w check` (typecheck, lint, 287 tests) and
-      # `prepack` copies README/LICENSE into the package.
+      - run: pnpm check
+
+      # Build explicitly rather than relying on `prepublishOnly` to reach it through
+      # `pnpm test`. A fresh clone has no dist/, so publishing an unbuilt tree would
+      # ship a package whose bin points at a file that does not exist — and the chain
+      # that currently prevents that is three scripts deep and easy to break.
+      - run: pnpm build
+
+      # Fail loudly here rather than publishing a broken artifact. `files` limits the
+      # tarball to dist/, so a missing bundle produces a package that installs fine
+      # and then cannot run at all.
+      - name: Verify the built artifact exists and runs
+        run: |
+          test -f apps/cli/dist/main.js || { echo "::error::dist/main.js missing after build"; exit 1; }
+          node apps/cli/dist/main.js --version
+
+      # Lints the tarball npm will actually publish: bin paths, exports, file layout.
+      - run: pnpm --filter issueforge exec publint
+
+      # Refuse to republish a version that already exists, with a clear message
+      # instead of npm's E403. Version bumps live in package.json and main.ts, and
+      # tests/packaging.test.ts fails if the two disagree.
+      - name: Check this version is not already published
+        run: |
+          VERSION=$(node -p "require('./apps/cli/package.json').version")
+          if npm view "issueforge@$VERSION" version >/dev/null 2>&1; then
+            echo "::error::issueforge@$VERSION is already on npm. Bump the version in apps/cli/package.json and the VERSION constant in apps/cli/src/main.ts."
+            exit 1
+          fi
+          echo "publishing issueforge@$VERSION"
+
+      # `prepack` copies README/LICENSE into the package; `prepublishOnly` re-runs
+      # the checks above as a last line of defence.
       - run: npm publish --provenance --tag "${{ inputs.tag }}"
         working-directory: apps/cli
