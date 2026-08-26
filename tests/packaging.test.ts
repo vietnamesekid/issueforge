@@ -206,6 +206,40 @@ describe('release workflow', () => {
   });
 });
 
+describe('lockfile', () => {
+  it('keeps catalog: specifiers as catalog:, not pinned versions', () => {
+    // The bug this test exists for: a dependabot bump rewrote the ROOT importer's
+    // @types/node specifier from `catalog:` to the literal `26.2.0`, while every
+    // other importer kept `catalog:`. `pnpm install --frozen-lockfile` then refuses
+    // with ERR_PNPM_OUTDATED_LOCKFILE, and CI fails on its first step — after the
+    // PR itself had gone green, because the mismatch only appears once the merge
+    // combines the bump with the catalog.
+    const wholeLock = readFileSync(join(ROOT, 'pnpm-lock.yaml'), 'utf8');
+    const workspace = readFileSync(join(ROOT, 'pnpm-workspace.yaml'), 'utf8');
+
+    // Only the `importers:` section matters. The `catalogs:` block above it holds
+    // the real version range — that is where the version is SUPPOSED to live, and
+    // matching it here would flag the correct state as the bug.
+    const importersAt = wholeLock.indexOf('\nimporters:');
+    expect(importersAt, 'lockfile has no importers section').toBeGreaterThan(-1);
+    const lock = wholeLock.slice(importersAt);
+
+    // Every dependency named in the catalog must be referenced through it.
+    const cataloged = [...workspace.matchAll(/^\s+["']?(@?[\w./-]+)["']?:\s/gm)]
+      .map((m) => m[1])
+      .filter((name): name is string => name !== undefined && name.startsWith('@'));
+
+    expect(cataloged.length).toBeGreaterThan(0);
+
+    for (const name of cataloged) {
+      // Importer entries look like:  '@types/node':\n  specifier: catalog:
+      const pinned = new RegExp(`'${name}':\\s*\\n\\s*specifier: (?!'catalog:')[\\d^~]`, 'g');
+      const matches = lock.match(pinned) ?? [];
+      expect(matches, `${name} is pinned in pnpm-lock.yaml instead of using catalog:`).toEqual([]);
+    }
+  });
+});
+
 describe('README claims', () => {
   const readme = readFileSync(join(ROOT, 'README.md'), 'utf8');
 
