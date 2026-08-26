@@ -94,6 +94,18 @@ describe('buildReproduceCard', () => {
     it('keeps the untrusted-input warning first', () => {
       expect(brief().split('\n')[0]).toMatch(/UNTRUSTED/);
     });
+
+    it('records the outcome as a label, so the issue list shows state', () => {
+      // Without this an issue keeps only the REQUEST label after a run, so a maintainer
+      // cannot tell queued from running from done without opening the Actions tab.
+      // Vercel drives 4,213 issues by replacing the intent label with an outcome one.
+      expect(brief()).toMatch(/--add-label issueforge:/);
+      expect(brief()).toMatch(/--remove-label issueforge:reproduce/);
+    });
+
+    it('does not invent labels that do not exist', () => {
+      expect(brief()).toMatch(/if one does not, say so rather than creating it/i);
+    });
   });
 
   it('lets the harness write anywhere else — method is its decision', () => {
@@ -159,5 +171,10 @@ describe('buildFixCard', () => {
 
   it('keeps the untrusted-input warning first', () => {
     expect(fixCard().instructions.split('\n')[0]).toMatch(/UNTRUSTED/);
+  });
+
+  it('records the outcome as a label', () => {
+    expect(fixCard().instructions).toMatch(/--remove-label issueforge:fix/);
+    expect(fixCard().instructions).toMatch(/--add-label issueforge:/);
   });
 });

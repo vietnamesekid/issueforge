@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { Verdict } from './common.js';
 
 /**
  * The subset of the `issues.labeled` webhook payload IssueForge actually reads,
@@ -47,6 +48,26 @@ export const INTENT_LABELS = {
   'issueforge:cancel': 'cancel',
 } as const;
 
+
+/**
+ * The label a run leaves behind, naming its outcome.
+ *
+ * Derived from `Verdict` rather than hand-listed: the verdict vocabulary has been
+ * copied by hand before and drifted, and a label nobody creates is a label the agent
+ * cannot apply.
+ *
+ * These are written by the HARNESS, not by IssueForge — the same principle as the
+ * harness writing its own comment: it knows what it did. What they buy is a maintainer
+ * being able to see, and filter, a run's outcome from the issue list without opening
+ * the Actions tab. Vercel drives 4,213 issues this way.
+ */
+export const outcomeLabel = (verdict: Verdict): string => `issueforge:${verdict}`;
+
+/** Every label `issueforge init` should create in a repository. */
+export const ALL_LABELS: readonly string[] = [
+  ...Object.keys(INTENT_LABELS),
+  ...Verdict.options.map(outcomeLabel),
+];
 
 export type GitHubIssueEvent = z.infer<typeof GitHubIssueEvent>;
 export type IntentLabel = keyof typeof INTENT_LABELS;

@@ -1,5 +1,6 @@
 import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
+import { ALL_LABELS, INTENT_LABELS } from '@issueforge/contracts';
 
 /**
  * Generates the two files a repository needs to use IssueForge.
@@ -100,7 +101,52 @@ export function runInit(cwd: string, force = false): InitResult[] {
   return [
     write(join(cwd, '.github', 'workflows', 'issueforge.yml'), WORKFLOW, force),
     write(join(cwd, '.issueforge', 'config.json'), CONFIG, force),
+    write(join(cwd, '.issueforge', 'labels.sh'), labelScript(), force),
   ];
+}
+
+/**
+ * A script that creates every label IssueForge uses.
+ *
+ * Emitted rather than executed: `init` writes files and never touches the network, and
+ * a maintainer should see what will be created on their repository before it is.
+ *
+ * It exists because the first live fix run failed with "failed to update 1 issue" —
+ * `issueforge:fix` did not exist yet, and nothing said it had to. Every first-time user
+ * would hit that.
+ */
+function labelScript(): string {
+  const lines = ALL_LABELS.map(
+    (label) =>
+      `gh label create ${JSON.stringify(label)} --color ${colourFor(label)} ` +
+      `--description ${JSON.stringify(describe(label))} --force`,
+  );
+
+  return [
+    '#!/bin/sh',
+    '# Creates the labels IssueForge uses. Safe to re-run: --force updates in place.',
+    '#',
+    '# Intent labels are what YOU apply to ask for a run.',
+    '# Outcome labels are what the agent applies when it finishes, so the issue list',
+    '# shows what happened without opening the Actions tab.',
+    'set -e',
+    '',
+    ...lines,
+    '',
+  ].join('\n');
+}
+
+/** Intent labels blue, conclusions green, non-conclusions grey. */
+function colourFor(label: string): string {
+  if (label in INTENT_LABELS) return '1D76DB';
+  return label === 'issueforge:reproduced' || label === 'issueforge:fixed' ? '0E8A16' : 'BFD4F2';
+}
+
+function describe(label: string): string {
+  const intent = (INTENT_LABELS as Record<string, string | undefined>)[label];
+  return intent === undefined
+    ? `IssueForge outcome: ${label.replace('issueforge:', '')}`
+    : `IssueForge: run the ${intent} task`;
 }
 
 export function renderInit(results: readonly InitResult[]): string {
@@ -115,7 +161,8 @@ export function renderInit(results: readonly InitResult[]): string {
     'Next:',
     '  1. issueforge doctor',
     '  2. Register a self-hosted runner labelled "issueforge" on this repository',
-    '  3. Add ANTHROPIC_API_KEY as a repository secret',
+    '  3. Create the labels:',
+    '       sh .issueforge/labels.sh',
     '  4. Label an issue "issueforge:reproduce"',
     '',
     'Use a private repository. A self-hosted runner executes on your machine, and',
