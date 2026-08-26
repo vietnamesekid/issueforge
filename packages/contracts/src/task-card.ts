@@ -27,13 +27,9 @@ export const TaskConstraints = z.object({
    * `.github/**` and `.git/**` are always blocked regardless of what is listed here.
    */
   forbiddenPaths: z.array(z.string().min(1)).default([]),
-  /** The harness must not push; IssueForge owns all git and GitHub writes. */
-  doNotPush: z.literal(true).default(true),
-  /** Portable fallback location for the structured result (see HarnessResult). */
-  resultPath: z.string().min(1).default('artifacts/result.json'),
   /** Wall-clock budget enforced by the supervisor, not by the harness. */
   timeoutMs: z.number().int().positive().default(1_800_000),
-  /** Cost ceiling. Real runs cost $0.20–$0.47 for a single regression test, so this is not optional. */
+  /** Turn ceiling, enforced by the harness CLI. Bounds how far a run can wander. */
   maxTurns: z.number().int().positive().default(30),
 });
 

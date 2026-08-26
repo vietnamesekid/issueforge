@@ -55,6 +55,47 @@ describe('buildReproduceCard', () => {
     expect(hostile.instructions).toMatch(/UNTRUSTED/);
   });
 
+  describe('the brief', () => {
+    const brief = () => card().instructions;
+
+    it('defines what "reproduced" means, so it is not adjudicated afterwards', () => {
+      // Three live runs disagreed with the supervisor about this, and each time the
+      // agent was right and the definition was simply missing. Naming it in the brief
+      // is cheaper than grading the agent against an unstated rule.
+      expect(brief()).toMatch(/reproduced/i);
+      expect(brief()).toMatch(/again|clean shell/i);
+      expect(brief()).toMatch(/environment/i);
+    });
+
+    it('asks for a check the agent can run before concluding', () => {
+      // "Claude stops when the work looks done" — without something that returns pass
+      // or fail, "looks done" is the only signal it has.
+      expect(brief()).toMatch(/ran it again|clean shell/i);
+    });
+
+    it('asks for evidence, not assertions', () => {
+      expect(brief()).toMatch(/OBSERVED/);
+      expect(brief()).toMatch(/real output|not a summary/i);
+    });
+
+    it('gives the agent a way to express uncertainty', () => {
+      // Without one it rounds up to yes. "3 of 5 attempts" is a finding.
+      expect(brief()).toMatch(/could not reproduce/i);
+      expect(brief()).toMatch(/of \d|sometimes/i);
+    });
+
+    it('still refuses to dictate method — that was ARCH-1', () => {
+      // The earlier version named the test runner and where tests live, and a live run
+      // failed because the repository used something else.
+      expect(brief()).not.toMatch(/\bvitest\b|\bjest\b|\bnpm test\b/i);
+      expect(brief()).toMatch(/your call/i);
+    });
+
+    it('keeps the untrusted-input warning first', () => {
+      expect(brief().split('\n')[0]).toMatch(/UNTRUSTED/);
+    });
+  });
+
   it('lets the harness write anywhere else — method is its decision', () => {
     expect(card().constraints.allowedPaths).toEqual(['**']);
   });

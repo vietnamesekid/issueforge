@@ -42,8 +42,8 @@ describe('TaskCard', () => {
 
   it('round-trips and applies safe defaults', () => {
     const card = TaskCard.parse(minimal);
-    expect(card.constraints.doNotPush).toBe(true);
-    expect(card.constraints.resultPath).toBe('artifacts/result.json');
+    expect(card.constraints.timeoutMs).toBeGreaterThan(0);
+    expect(card.constraints.maxTurns).toBeGreaterThan(0);
     // The untrusted-data wording is part of the contract, not adapter boilerplate.
     expect(card.instructions).toContain('UNTRUSTED');
     expect(TaskCard.parse(TaskCard.parse(minimal))).toEqual(card);
