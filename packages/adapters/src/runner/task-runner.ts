@@ -9,6 +9,8 @@ import {
   type HarnessRunOutcome,
   type RepoSlug,
   type RunId,
+  type RunPhase,
+  type RunPhaseEvent,
   type RunState,
   type TaskCard,
   type TaskKind,
@@ -78,6 +80,16 @@ export interface TaskRunnerDeps {
   logger: Logger;
   /** Root for run artifacts. Injected so tests need no home directory. */
   root: string;
+  /**
+   * Called as each stage begins, so a caller can show progress.
+   *
+   * Purely an observer: it reports transitions this runner already makes and MUST NOT
+   * influence them. A run takes minutes, and without this the CLI can say nothing
+   * until it ends.
+   *
+   * Deliberately synchronous and deliberately unawaited — see `#phase`.
+   */
+  onPhase?: (event: RunPhaseEvent) => void;
 }
 
 export interface TaskRequest {
@@ -129,12 +141,31 @@ export class TaskRunner {
     this.#deps = deps;
   }
 
+  /**
+   * Report a stage beginning.
+   *
+   * Wrapped in a catch that swallows: this is a progress display, and a renderer that
+   * throws — a closed pipe, a terminal that went away — must never take down a run
+   * that is mid-flight and holding an issue lock. Failure here IS the answer, which is
+   * why the empty catch is allowed under the repo's rule for silent catches.
+   */
+  #phase(phase: RunPhase, detail?: string): void {
+    const { onPhase } = this.#deps;
+    if (onPhase === undefined) return;
+    try {
+      onPhase({ phase, at: Date.now(), ...optionalDefined('detail', detail) });
+    } catch {
+      // See above: a broken display must not break the run.
+    }
+  }
+
   async run(request: TaskRequest): Promise<TaskResult> {
     const { store, logger } = this.#deps;
 
     // Before anything else. A previous run killed outright cannot have cleaned up
     // after itself, and its process group may still be burning CPU and holding
     // deleted inodes.
+    this.#phase('reaping');
     const reaped = reapOrphans(store);
     if (reaped.length > 0) {
       logger.warn({ reaped }, 'reaped orphaned process groups from earlier runs');
@@ -159,6 +190,7 @@ export class TaskRunner {
     // impossible — that would be unrecoverable, since nothing would name the holder.
     store.createRun(run);
 
+    this.#phase('locking', `issue #${request.issueNumber}`);
     if (!store.tryAcquireLock({
       repo: request.repo,
       issueNumber: request.issueNumber,
@@ -193,6 +225,7 @@ export class TaskRunner {
 
     store.updateRun(runId, { status: 'running' });
 
+    this.#phase('cloning', `${request.repo} at ${request.baseSha.slice(0, 7)}`);
     const workspace = await workspaces.create({
       repo: request.repo,
       issueNumber: request.issueNumber,
@@ -203,6 +236,7 @@ export class TaskRunner {
     onWorkspace(workspace);
     store.updateRun(runId, { workdir: workspace.path });
 
+    this.#phase('preparing', 'building task card');
     const card = this.#task.buildCard({
       ...optionalDefined('maxTurns', this.#task.maxTurns),
       priorArtifacts: findPriorFindings(store, request),
@@ -227,6 +261,7 @@ export class TaskRunner {
       startedAt: Date.now(),
     });
 
+    this.#phase('spawning', harness.name);
     const run = harness.run({
       cwd: workspace.path,
       taskCard: card,
@@ -245,6 +280,11 @@ export class TaskRunner {
     // reaper could then kill an unrelated process that inherited the pid.
     store.updateRun(runId, { ownership: run.ownership });
 
+    // Only after ownership is recorded. Emitting before would put a display update
+    // ahead of the write that makes the process group reapable, and a kill in that
+    // window leaves an orphan nobody owns.
+    this.#phase('working', `${this.#task.kind} on issue #${request.issueNumber}`);
+
     try {
       // Streamed while the run is live, so a run killed mid-flight still shows how
       // far it got. The transcript is often the only account of what happened.
@@ -258,6 +298,7 @@ export class TaskRunner {
       // Audit before interpreting anything the harness produced. A run that wrote
       // outside its permitted paths has misbehaved, and its output must not be read
       // as a finding about the bug — that would report a policy failure as a verdict.
+      this.#phase('auditing', 'checking write boundary');
       const audit = auditWorkspace(workspace.path, {
         // The task card is IssueForge's own file, written into the workspace so the
         // harness can read it. Auditing our own artefact against the harness's
@@ -277,6 +318,7 @@ export class TaskRunner {
         );
       }
 
+      this.#phase('finishing');
       return this.#finish(runId, attempt, classifyAttempt(outcome), outcome);
     } catch (error) {
       events.flush();

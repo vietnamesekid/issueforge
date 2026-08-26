@@ -3,6 +3,10 @@ import { Command } from 'commander';
 import type { RunId, RunStatus, Sha } from '@issueforge/contracts';
 import { optionalDefined, RepoSlug, Sha as ShaSchema, Verdict } from '@issueforge/contracts';
 import { reapOrphans, FIX, REPRODUCE, type TaskDefinition } from '@issueforge/adapters';
+import { LiveRegion } from './ui/live-region.js';
+import { RunProgress } from './ui/run-progress.js';
+import { sanitise } from './ui/terminal-text.js';
+import { createTheme, styleStatus, type Theme } from './ui/theme.js';
 import { createContext } from './context.js';
 import {
   NotOurLabelError,
@@ -66,12 +70,33 @@ const TASKS: Partial<Record<string, TaskDefinition>> = {
   fix: FIX,
 };
 
+/**
+ * The theme for this invocation.
+ *
+ * Resolved once from the root command's flags so every renderer is handed the same
+ * one, and so `--no-color` is a single global rather than a flag each command has to
+ * remember to declare.
+ */
+function themeFor(program: Command): Theme {
+  const { color } = program.opts<{ color: boolean }>();
+
+  // ONLY the negative is an instruction. Commander gives a `--no-x` flag a default of
+  // `true` when it is ABSENT, so forwarding that `true` told createTheme "colour is
+  // explicitly on" and detection never ran — observed: escape codes filling a file the
+  // user had redirected output to. A `true` here means "the user did not say", which
+  // is precisely the case detection exists to handle, so it must pass nothing at all.
+  return createTheme(color ? {} : { color: false });
+}
+
 export function buildProgram(): Command {
   const program = new Command();
   program
     .name('issueforge')
     .description('Local-first GitHub IssueOps supervisor for coding-agent harnesses')
-    .version(VERSION);
+    .version(VERSION)
+    // Colour is on for a terminal and off for a pipe, CI, or NO_COLOR; this is the
+    // manual override for the cases detection gets wrong.
+    .option('--no-color', 'disable coloured output');
 
   program
     .command('handle')
@@ -106,7 +131,7 @@ export function buildProgram(): Command {
         // runner at all.
         const cancelled = cancelRuns(createContext(), { issueNumber: event.issueNumber });
         if (options.json === true) emit(cancelled);
-        else process.stdout.write(`${renderCancelled(cancelled)}\n`);
+        else process.stdout.write(`${renderCancelled(cancelled, { theme: themeFor(program) })}\n`);
         return;
       }
 
@@ -145,7 +170,7 @@ export function buildProgram(): Command {
           : {}),
       });
 
-      report(result, options.json === true);
+      report(result, options.json === true, themeFor(program));
     });
 
   program
@@ -189,26 +214,49 @@ export function buildProgram(): Command {
 
         const remote = options.remote ?? `https://github.com/${options.repo}.git`;
 
-        const result = await runTask(context, definition, {
-          // Straight from argv, so parsed here rather than trusted. A bad slug now
-          // fails at the boundary with a readable message instead of part-way through
-          // a run that has already taken the issue lock.
-          repo: RepoSlug.parse(options.repo),
-          issueNumber: options.issue,
-          issue: { number: options.issue, title: options.title, body: options.body },
-          remote,
-          // `??` would hand through an unvalidated argv string; a supplied SHA has to
-          // be parsed, a resolved one is already branded.
-          baseSha:
-            options.baseSha === undefined
-              ? resolveBaseSha(options.repo, 'HEAD')
-              : ShaSchema.parse(options.baseSha),
-          ...(options.publish && process.env['ISSUEFORGE_GITHUB_TOKEN'] !== undefined
-            ? { githubToken: process.env['ISSUEFORGE_GITHUB_TOKEN'] }
-            : {}),
-        });
+        /**
+         * Progress goes to stderr, never stdout.
+         *
+         * stdout carries `--json`, and interleaving a repaint into it would corrupt
+         * the document anything scripting this parses. Suppressed entirely under
+         * `--json` so a machine consumer sees no decoration at all.
+         */
+        const progress =
+          options.json === true
+            ? undefined
+            : new RunProgress({
+                theme: themeFor(program),
+                region: new LiveRegion({ stream: process.stderr }),
+              });
 
-        report(result, options.json === true);
+        try {
+          const result = await runTask(context, definition, {
+            // Straight from argv, so parsed here rather than trusted. A bad slug now
+            // fails at the boundary with a readable message instead of part-way through
+            // a run that has already taken the issue lock.
+            repo: RepoSlug.parse(options.repo),
+            issueNumber: options.issue,
+            issue: { number: options.issue, title: options.title, body: options.body },
+            remote,
+            // `??` would hand through an unvalidated argv string; a supplied SHA has to
+            // be parsed, a resolved one is already branded.
+            baseSha:
+              options.baseSha === undefined
+                ? resolveBaseSha(options.repo, 'HEAD')
+                : ShaSchema.parse(options.baseSha),
+            ...(options.publish && process.env['ISSUEFORGE_GITHUB_TOKEN'] !== undefined
+              ? { githubToken: process.env['ISSUEFORGE_GITHUB_TOKEN'] }
+              : {}),
+            ...optionalDefined('onPhase', progress?.advance.bind(progress)),
+          });
+
+          report(result, options.json === true, themeFor(program));
+        } finally {
+          // Always: an uncleared live region leaves the cursor hidden and the user's
+          // shell broken until they type `reset`. Same rule as the issue lock — a
+          // crashed run must not leave state behind.
+          progress?.stop();
+        }
       },
     );
 
@@ -222,7 +270,7 @@ export function buildProgram(): Command {
       const cancelled = cancelRuns(context, optionalDefined('issueNumber', options.issue));
 
       if (options.json === true) emit(cancelled);
-      else process.stdout.write(`${renderCancelled(cancelled)}\n`);
+      else process.stdout.write(`${renderCancelled(cancelled, { theme: themeFor(program) })}\n`);
     });
 
   program
@@ -244,7 +292,7 @@ export function buildProgram(): Command {
       const results = runDoctor();
 
       if (options.json === true) emit(results);
-      else process.stdout.write(`${renderDoctor(results)}\n`);
+      else process.stdout.write(`${renderDoctor(results, { theme: themeFor(program) })}\n`);
 
       // Non-zero so a setup script or CI step can branch on it.
       if (hasBlockingProblem(results)) process.exitCode = EXIT.failed;
@@ -318,7 +366,7 @@ export function buildProgram(): Command {
       if (options.yes) executeClean(context, targets);
 
       if (options.json === true) emit({ removed: options.yes, targets });
-      else process.stdout.write(`${renderCleanPlan(targets, !options.yes)}\n`);
+      else process.stdout.write(`${renderCleanPlan(targets, !options.yes, { theme: themeFor(program) })}\n`);
     });
 
   program
@@ -336,7 +384,7 @@ export function buildProgram(): Command {
 
       const rows = collectStatus(context, options.limit);
       if (options.json === true) emit(rows);
-      else process.stdout.write(`${renderStatusTable(rows)}\n`);
+      else process.stdout.write(`${renderStatusTable(rows, { theme: themeFor(program), ...optionalDefined('columns', process.stdout.columns) })}\n`);
     });
 
   return program;
@@ -353,9 +401,15 @@ export function buildProgram(): Command {
 function report(
   result: { runId: RunId | undefined; status: RunStatus; detail: string },
   json: boolean,
+  theme: Theme = createTheme(),
 ): void {
   if (json) emit(result);
-  else process.stdout.write(`${result.status}: ${result.detail}\n`);
+  else {
+    // `sanitise`, not `oneLine`: this is the final verdict, not a table cell, and a
+    // harness summary spanning several lines is legitimate here. Control characters
+    // still go — the detail can quote issue text, which is data, never instructions.
+    process.stdout.write(`${styleStatus(theme, result.status)} ${sanitise(result.detail)}\n`);
+  }
 
   process.exitCode = exitCodeFor(result.status);
 }

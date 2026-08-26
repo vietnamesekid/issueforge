@@ -1,5 +1,6 @@
 import { isGroupAlive, killGroup } from '@issueforge/adapters';
 import type { RunId } from '@issueforge/contracts';
+import { createTheme, type Theme } from '../ui/theme.js';
 import type { AppContext } from '../context.js';
 
 /**
@@ -56,14 +57,22 @@ export function cancelRuns(context: AppContext, options: CancelOptions = {}): Ca
   return cancelled;
 }
 
-export function renderCancelled(cancelled: readonly CancelledRun[]): string {
-  if (cancelled.length === 0) return 'Nothing to cancel — no run is in flight.';
+export function renderCancelled(
+  cancelled: readonly CancelledRun[],
+  options: { theme?: Theme } = {},
+): string {
+  const theme = options.theme ?? createTheme();
+  if (cancelled.length === 0) return theme.dim('Nothing to cancel — no run is in flight.');
 
   return cancelled
     .map(
       (c) =>
-        `cancelled ${c.runId} (issue #${c.issueNumber}, pgid ${c.pgid})` +
-        (c.wasAlive ? '' : ' — already exited'),
+        `${theme.warning('■')} cancelled ${theme.dim(c.runId)} ` +
+        `${theme.bold(`#${c.issueNumber}`)} ${theme.dim(`(pgid ${c.pgid})`)}` +
+        // Worth saying: the difference between "we killed it" and "it was already
+        // gone and we only cleared the row" is what tells a user whether the thing
+        // they were worried about is still running.
+        (c.wasAlive ? '' : theme.dim(' — already exited')),
     )
     .join('\n');
 }

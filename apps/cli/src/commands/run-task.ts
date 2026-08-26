@@ -2,6 +2,7 @@ import {
   optionalDefined,
   type RepoSlug,
   type RunId,
+  type RunPhaseEvent,
   type RunStatus,
   type Sha,
 } from '@issueforge/contracts';
@@ -29,6 +30,13 @@ export interface RunTaskOptions {
   baseSha: Sha;
   /** Lets the harness report back. Absent for a local run with no GitHub side. */
   githubToken?: string;
+  /**
+   * Called as each stage begins, so the CLI can show progress.
+   *
+   * A run takes minutes; without this the only honest reading of a slow run and a
+   * hung one is the same silence.
+   */
+  onPhase?: (event: RunPhaseEvent) => void;
 }
 
 export interface RunTaskOutput {
@@ -61,6 +69,7 @@ export async function runTask(
     config: context.config,
     logger: context.logger,
     root: context.root,
+    ...optionalDefined('onPhase', options.onPhase),
   }, task);
 
   try {

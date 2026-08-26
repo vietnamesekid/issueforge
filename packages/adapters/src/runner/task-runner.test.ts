@@ -407,3 +407,72 @@ describe('TaskRunner', { timeout: 30_000 }, () => {
     expect(store.listReapCandidates()).toHaveLength(0);
   });
 });
+
+describe('phase reporting', { timeout: 30_000 }, () => {
+  it('reports the stages of a run in the order they happen', async () => {
+    // A run takes minutes. Without this the CLI can say nothing at all until it ends,
+    // which is the whole reason the callback exists.
+    const seen: string[] = [];
+    harness.outcome = claimed('reproduced');
+
+    await new TaskRunner(
+      { ...deps(), onPhase: (event) => seen.push(event.phase) },
+    ).run(request());
+
+    expect(seen).toEqual([
+      'reaping',
+      'locking',
+      'cloning',
+      'preparing',
+      'spawning',
+      'working',
+      'auditing',
+      'finishing',
+    ]);
+  });
+
+  it('reports "working" only AFTER ownership is recorded', async () => {
+    // Ordering, not cosmetics: the write that records the process group is what makes
+    // it reapable. A display update ahead of that write opens a window where a kill
+    // leaves an orphan nobody owns.
+    let ownershipAtWorking: unknown;
+    harness.outcome = claimed('reproduced');
+
+    await new TaskRunner(
+      {
+        ...deps(),
+        onPhase: (event) => {
+          if (event.phase !== 'working') return;
+          const runs = store.listRuns({ limit: 1 });
+          ownershipAtWorking = runs[0]?.ownership;
+        },
+      },
+    ).run(request());
+
+    expect(ownershipAtWorking).toBeDefined();
+  });
+
+  it('survives a callback that throws — a broken display must not kill a live run', async () => {
+    // The run holds an issue lock. A renderer throwing on a closed pipe or a terminal
+    // that went away must not propagate and strand that lock.
+    harness.outcome = claimed('reproduced');
+
+    const result = await new TaskRunner(
+      {
+        ...deps(),
+        onPhase: () => {
+          throw new Error('terminal went away');
+        },
+      },
+    ).run(request());
+
+    expect(result.status).toBe('reproduced');
+  });
+
+  it('runs identically when no callback is given', async () => {
+    // The callback is optional and every existing caller omits it.
+    harness.outcome = claimed('reproduced');
+    const result = await new TaskRunner(deps()).run(request());
+    expect(result.status).toBe('reproduced');
+  });
+});
