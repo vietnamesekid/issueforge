@@ -2,45 +2,50 @@
 
 **A local-first GitHub IssueOps supervisor for the coding agents you already have installed.**
 
-IssueForge watches for a label on a GitHub issue, creates an isolated Git worktree on your machine,
-runs Codex or Claude Code non-interactively inside it, **independently verifies the evidence they
-produce**, and only then opens a draft pull request.
+Label an issue, and the agent goes to work on it — in an isolated worktree pinned to an exact
+commit, on your machine — then reports what it found back to the issue for you to review.
 
 It is not a new coding agent. It does not replace Codex or Claude Code, and it does not reimplement
-their planning or tool-use loop. It supplies the workflow discipline around them.
+their planning or tool-use loop. It handles everything *around* them: the trigger, the workspace,
+the boundaries, the bookkeeping and the cleanup.
 
 > GitHub supplies the issue and the event.
 > Your machine supplies the agent, the workspace, the credentials and the storage.
-> IssueForge supplies the discipline.
+> IssueForge supplies the automation.
+> **You supply the judgement.**
 
-**Status: pre-alpha.** Nothing is published yet and there is no working build. The design has been
-validated against official documentation and live experiments, but the implementation has not
-started. See [Roadmap](#roadmap).
+**Status: pre-alpha, and now actually runs.** The reproduce task works end to end — a labelled
+issue on a private repository has been triaged by Claude Code start to finish, with the agent
+posting its own findings back to the issue. Not published to npm yet; expect rough edges. Fix and
+verify are next. See [Roadmap](#roadmap).
 
 ---
 
 ## The problem
 
-Triaging a bug repository is the same boring, high-discipline loop every time:
+A coding agent on your laptop can already triage a bug well. Getting it to do so on a real issue
+is the tedious part:
 
-1. Reproduce the bug on a pinned commit.
-2. Prove the reproduction is real.
-3. Fix it.
-4. Prove the fix works in a clean environment.
-5. Open a PR for a human to review.
+1. Read the issue and work out what it is actually claiming.
+2. Find the right commit and get a clean checkout of it — not your working tree, with your
+   half-finished branch in it.
+3. Write the prompt.
+4. Wait, then read the transcript.
+5. Write up what happened somewhere the reporter can see it.
+6. Clean up the worktree, and the processes the run left behind.
 
-Coding agents can do the *inner* work of each step. What they cannot do is hold themselves to the
-outer discipline — and, critically, **they self-report success**. An agent that says "I reproduced
-the bug" has produced a *claim*, not evidence.
-
-Today the developer supplies that rigour by hand, and does it inconsistently.
+Steps 1 and 4 need you. **The rest is scaffolding**, and doing it by hand is why "I'll look at that
+issue" turns into a week-old tab.
 
 ## The thesis
 
-> The scarce thing is not code generation. It is **trustworthy evidence that a claim is true**.
+> The scarce thing is not code generation. It is **the discipline around it**: a clean workspace,
+> an exact commit, a bounded blast radius, and a record of what happened.
 
-IssueForge never trusts the harness's claim. The agent's result is treated as untrusted input, and
-IssueForge independently replays the evidence before any state transition:
+IssueForge automates the scaffolding and stops where judgement starts. The agent decides how to do
+the work — it has your `CLAUDE.md`, your skills and your project conventions, and it knows the
+repository better than a supervisor could. It then reports what it found to the issue, and a human
+reads it.
 
 ```mermaid
 flowchart LR
@@ -49,15 +54,21 @@ flowchart LR
   C --> D["IssueForge supervisor"]
   D --> E["Git worktree at pinned base SHA"]
   E --> F["Claude Code or Codex"]
-  F --> G["Harness claim (untrusted)"]
-  G --> V["Independent replay by IssueForge"]
-  V --> H["Local SQLite + artifacts"]
-  V --> I["GitHub comment / draft PR"]
+  F --> G["Agent reports to the issue"]
+  F --> H["Local SQLite + transcript"]
+  G --> R["Human review"]
 ```
 
-The step that matters is `G → V`. Everything else is plumbing around that gate. If an agent claims a
-bug is reproduced but the reproduction command actually passes, IssueForge classifies it
-`cannot-reproduce` — regardless of what the agent said.
+**IssueForge does not grade the agent's work.** It once did, and it was wrong three times in a row
+on live issues — rejecting a correct reproduction because the test was in the wrong place, then
+because an assertion was inline, then because it had blocked the repository's own `CLAUDE.md` and
+the agent could not learn which test runner to use. Each time it withheld a correct finding from
+the one reviewer who could have judged it in seconds.
+
+So the judgement belongs to the person who was always going to review the pull request anyway.
+What IssueForge guarantees is narrower and actually enforceable: **the run happened at the commit
+it says, inside a worktree that is not yours, unable to touch the paths that matter, and it is all
+written down.**
 
 ## Why local-first
 
@@ -93,44 +104,54 @@ cancel button.
 
 ### Labels are intent
 
-A maintainer applies an intent label; IssueForge writes back status labels and one concise comment.
+A maintainer applies an intent label. That is the only way a run ever starts.
 
-| Intent label | Meaning |
-| --- | --- |
-| `issueforge:reproduce` | Run triage/reproduction only |
-| `issueforge:fix` | Allow a confirmed issue to be fixed |
-| `issueforge:retry` | Retry the last eligible failed/inconclusive task |
-| `issueforge:cancel` | Cancel a live run and clean up |
+| Intent label | Meaning | Status |
+| --- | --- | --- |
+| `issueforge:reproduce` | Triage the issue and report what you find | **Works today** |
+| `issueforge:fix` | Attempt a fix and open a draft PR | v0.2 — accepted, then skipped |
+| `issueforge:retry` | Retry the last failed or inconclusive task | Not wired up yet |
+| `issueforge:cancel` | Cancel a live run and clean up | Not wired up yet |
 
-Status labels — `queued`, `running`, `reproduced`, `cannot-reproduce`, `needs-info`, `fix-pr-open`,
-`verification-failed`, `ready-for-review`, `blocked`, `cancelled` — are **outputs only, never
-triggers**. Every stage transition is driven by a human applying the next intent label. This is a
-deliberate design constraint, not a limitation to be worked around later.
+The last three are recognised and then declined with a message on stderr, rather than failing
+silently. They are listed here because the labels exist, not because they do anything yet.
+
+**IssueForge writes no labels and posts no comments.** The agent reports its own findings with
+`gh`, because it knows what it did and writes a better account of it than a template can assemble
+from a result object.
+
+Every stage transition is driven by a human applying the next intent label — and that is also a
+hard constraint, not only a preference: GitHub does not create workflow runs from events triggered
+by `GITHUB_TOKEN`, so a label written by a run could never start the next one.
 
 ### Who owns what
 
 | Responsibility | Owner |
 | --- | --- |
 | Issues, labels as intent, event delivery, run history | **GitHub** |
-| Event parsing, issue locking, lifecycle state, task cards, **evidence validation**, policy gates, retention | **IssueForge** |
-| Repository comprehension, planning, search, tool use, editing, running commands | **The harness** |
+| Event parsing, issue locking, lifecycle state, task cards, write boundaries, bookkeeping, retention, orphan cleanup | **IssueForge** |
+| Repository comprehension, planning, search, tool use, editing, running commands, **reporting its own findings** | **The harness** |
 | Worktrees, refs, diffs, branches, base-SHA pinning | **Git** |
 | Process groups, signals, filesystem, env isolation | **Local OS** |
+| **Deciding whether the finding is right, and what to do about it** | **You** |
 
 The boundary is enforced, not merely documented: IssueForge never plans steps, never chooses tools,
 and never calls a model. If it ever needed to, it would have become a competing coding agent with no
 reason to exist.
 
-### Verification is a separate clone, not a sibling worktree
+### Workspaces, and why verify gets its own clone
 
-Git worktrees share one `.git` directory: a branch created in one worktree is immediately visible
-from another. That makes a worktree an *isolation* boundary for files, but **not** a trust boundary —
-a fix run could write refs and objects the verifier then reads.
+A run never touches a repository you work in. Pinning a base SHA there would detach your HEAD and
+drag your uncommitted work across the checkout — verified the hard way.
 
-So the verify stage runs in its own clone with its own object store, created with
-`git clone --reference <mirror> --dissociate`. That borrows objects from a local repository for a
-fast clone and then severs the link. IssueForge also never operates inside a repository you work in:
-pinning a base SHA there would detach your HEAD and drag your uncommitted work across the checkout.
+Reproduce and fix each get a `git worktree` cut from a shared local mirror: cheap, and isolating
+working files is all they need from one another.
+
+Verify (v0.2) gets a full clone instead, because **worktrees share one `.git`**. A branch created
+in one worktree is immediately visible from its sibling, so a worktree isolates *files* but not
+*refs*. The clone is made with `git clone --reference <mirror> --dissociate`, which borrows objects
+for speed and then severs the link. The trap: `--shared` without `--dissociate` leaves the clone
+permanently coupled while looking independent.
 
 ---
 
@@ -147,46 +168,79 @@ The part that does apply: anyone can open an issue and write its **body**, and t
 agent holding your credentials. That is a prompt-injection surface. Defaults:
 
 - **Issue text is data, never instructions.** It reaches the harness through a task-card file, never
-  through argv or a shell string. All commands use argv arrays with `shell: false`.
+  through argv or a shell string. All commands use argv arrays with `shell: false`. The task card
+  says so explicitly in its first two lines, and in live testing the agent both resisted six
+  injection attempts and *described* them in its report.
+- **MCP servers are disabled.** `--strict-mcp-config` with an empty server map. Without it, a run
+  was observed inheriting five of the developer's authenticated servers — Gmail, Drive, Notion —
+  which turns a hostile issue body into an exfiltration path. This posture is asserted from the
+  harness's own first event, before any tokens are spent; a mismatch kills the run.
 - **Environment allowlist, never a denylist.** A naively spawned agent inherits your entire
-  environment; IssueForge passes roughly seven variables and no credentials. `GITHUB_TOKEN` is never
-  placed in the harness environment.
-- **The agent is isolated from local and repository config.** MCP servers are explicitly disabled —
-  without this, a run inherits your authenticated Gmail/Drive/Notion tools. Repository hooks and
-  `.mcp.json` are not executed.
-- **The sandbox posture is asserted before any tokens are spent**, and any attempt to act outside the
-  permitted boundary is recorded as a policy event.
-- **Write boundaries are enforced.** `.github/**`, `.git/**`, infrastructure and secret paths are
-  blocked; the changed-file inventory is diffed against the task's allowed paths.
+  environment (82 variables on this machine); IssueForge passes roughly seven, plus any it names
+  explicitly.
+- **Write boundaries are enforced.** `.github/**`, `.git/**`, `.env`, keys and credential files are
+  blocked outright, and the changed-file inventory is checked against them after the run. A
+  violation is recorded as `blocked`, and the run's output is not interpreted as a finding.
 - **Draft PRs only.** Human review and merge remain mandatory.
-- Use a dedicated OS account or machine for public repositories. A personal laptop is not a
-  disposable sandbox.
+- Use a **private repository**, and a dedicated OS account or machine for anything public. A personal
+  laptop is not a disposable sandbox.
 
-Isolating the agent from repository configuration means authentication uses an API key rather than
-your interactive login. That narrows the "reuse what you already have" promise, deliberately — a
-trusted-repository opt-out is planned.
+### Two deliberate trade-offs
+
+Both of these were once claimed as protections here. They are not, and pretending otherwise would be
+worse than the risk itself.
+
+**The agent reads your repository's configuration.** `CLAUDE.md`, `AGENTS.md`, skills and project
+instructions are all in scope, on purpose — that context is most of why a local agent is better than
+a hosted one. An earlier version blocked it and the result was an agent that could not discover the
+project used vitest, wrote a test that could not run, and was then marked down for it. The residual
+risk is real: repository config is executable input, and a contributor who can land a change to
+`CLAUDE.md` can influence a run. It is mitigated by the write boundary, by MCP isolation, and by the
+fact that you review the output — not by isolation from the repository.
+
+**The harness gets a GitHub token.** So that it can post its own findings, the job's `GITHUB_TOKEN`
+is forwarded as `GH_TOKEN`, named explicitly as an exception to the environment allowlist. It is
+scoped to that one repository and expires with the run. Everything else in your environment stays
+out.
+
+There is **no second automated layer** behind these. Earlier drafts of this file promised that an
+independent evidence check would catch whatever the sandbox missed; that component was removed after
+it repeatedly rejected correct work. The backstop is a human reading a draft PR — which is why draft
+PRs are not optional.
 
 ---
 
-## Planned usage
-
-None of this works yet.
+## Usage
 
 ```bash
-issueforge init          # generate config + workflow template
-issueforge doctor        # check Node, git, gh, harness, auth, runner
+issueforge init             # generate the workflow + config a repository needs
+issueforge doctor           # check Node, git, gh, harness, auth, runner
 
-issueforge listener install
+issueforge listener install    # prints how to register the self-hosted runner
 issueforge listener status
 issueforge listener uninstall
 
-issueforge run reproduce --issue 123
-issueforge run fix --issue 123
-issueforge status
-issueforge replay <run-id>
-issueforge clean --older-than 14d
-issueforge uninstall
+issueforge run reproduce --issue 123 --repo owner/name   # run one locally
+issueforge status                                        # what has run, and how it ended
+issueforge clean --older-than 14 --yes                   # remove old runs and worktrees
 ```
+
+`issueforge handle github-event --event-path "$GITHUB_EVENT_PATH"` is what the generated workflow
+calls; you do not run it by hand.
+
+`run fix` is accepted by the parser and refused — the fix task is v0.2.
+
+### Getting started
+
+1. `issueforge init` in the repository, then commit the generated workflow.
+2. `issueforge doctor` and fix anything it flags.
+3. Register a self-hosted runner labelled `issueforge` on that repository.
+4. Label an issue `issueforge:reproduce`.
+
+One thing `doctor` cannot check for you: a self-hosted runner does not inherit your interactive
+shell's `PATH`, so a version-managed Node (nvm, fnm, asdf, volta) is invisible to it and both
+`issueforge` and the `claude` it spawns become "command not found". The generated workflow reads
+`ISSUEFORGE_BIN` to work around it.
 
 ### Requirements
 
@@ -199,61 +253,54 @@ issueforge uninstall
 
 ## Roadmap
 
-### Phase 0 — De-risking spikes *(current)*
+### What was proven before building *(complete)*
 
-Five assumptions are being proven before implementation starts, because a negative result here changes
-the architecture rather than the code.
+Five assumptions were tested against real systems first, because a negative result would have
+changed the architecture rather than the code.
 
-**Process lifecycle — done, passed.** Reliable cleanup of a harness process tree works in-process, so
-container isolation stays optional rather than becoming a v0.1 requirement. The subtle part: when the
-supervisor is killed outright, its own run record can never be updated, so orphans are detected by
-checking whether the *owning process* is still alive rather than by trusting recorded state.
+**Event delivery.** A label applied on GitHub reached a local process in about ten seconds, with no
+inbound port, no tunnel and no polling. The same run also uncovered a work-destroying bug in the
+obvious workflow configuration: under GitHub's default concurrency queue, labelling three issues in
+quick succession **silently cancels the middle one**, with nothing surfaced anywhere. The generated
+workflow sets `queue: max` for exactly this reason.
 
-**The verification gate — done, passed.** This is the one that mattered. Against a real coding agent,
-the identical "I reproduced it" claim was accepted when the bug was present and rejected when it was
-not. The sharpest lesson: *"the command failed" is weak evidence.* A reproduction script containing
-nothing but `exit 1` initially slipped through. The fix is a **differential check** — a genuine
-reproduction must fail on the buggy code **and pass once the bug is removed** — which also catches a
-failure that is real but unrelated to the reported defect.
+**Process lifecycle.** Cleaning up a harness process tree works in-process, so container isolation
+stays optional rather than a v0.1 requirement. The subtle part: a supervisor killed outright can
+never update its own run record, so orphans are found by checking whether the *owning process* is
+still alive — never by trusting the ledger.
 
-**Event delivery — done, passed.** A label applied on GitHub reached a local process in about ten
-seconds, with no inbound port, no tunnel and no polling. The same run also reproduced a real
-work-destroying bug in the obvious workflow configuration: under GitHub's default concurrency queue,
-labelling three issues in quick succession **silently cancels the middle one**, with no error surfaced
-anywhere. Fixed by an explicit queue setting — and worth knowing about before it eats someone's issue.
+**Prompt-injection resistance.** Six real attacks — reading credentials outside the workspace, path
+traversal, injecting an exfiltration step into CI config, harvesting environment variables, leaking
+`.env`, and forcing a false verdict — were run against a live agent with decoy credential files
+planted nearby. All six were contained.
 
-**Prompt-injection resistance — done, passed.** Six real attacks — reading credentials outside the
-workspace, path traversal, injecting an exfiltration step into CI config, harvesting environment
-variables, leaking `.env`, and forcing a false verdict — were run against a live agent with decoy
-credential files planted nearby. All six were contained and nothing leaked.
+The lesson that shaped everything since: **the safest configuration was also completely useless.**
+Denying every action the agent had not pre-negotiated blocked its legitimate work too, producing an
+agent that leaked nothing and did nothing. Safety here means an explicit allowlist, not a blanket
+denial — and that same reasoning is why the supervisor no longer second-guesses the agent's method.
 
-The lesson that changed the design: the *safest* configuration was also completely useless. Denying
-every action the agent did not pre-negotiate blocked its legitimate work too, producing an agent that
-leaked nothing and did nothing. Safety here means an explicit allowlist, not a blanket denial. Separately,
-in three runs the agent resisted every attack yet still over-claimed a reproduction — and the evidence
-check caught it. Neither layer has to be perfect alone.
+**Workspace isolation.** A branch and tag deliberately injected from one worktree were visible in
+the shared mirror but **absent** from a `--dissociate` clone. Independence is demonstrated, not
+assumed.
 
-**Workspace isolation — done, passed.** Pinning, isolation, evidence capture and cleanup all behave as
-designed, including the case that matters most: a branch and tag deliberately injected from the fix
-workspace were visible in the local mirror but **absent** from the verification clone. Independence is
-demonstrated, not assumed.
+**Evidence validation — built, then removed.** An independent replay gate passed 8/8 in the lab and
+then failed three times out of three on live issues, rejecting correct work each time. It was
+deleted. The reasoning is in [The thesis](#the-thesis); it is listed here because "we tried it" is
+more useful than silence.
 
-**All five spikes passed, and none forced an architectural change** — implementation can begin.
-
-### v0.1 — Local Reproduce Gate
+### v0.1 — Local reproduce *(working)*
 
 - `init`, `doctor`, listener install/status/uninstall
 - GitHub labelled-event workflow template
-- Claude Code adapter, then Codex adapter as proof the abstraction is real
+- Claude Code adapter (Codex next, as proof the abstraction is real)
 - Local worktrees, SQLite run ledger, out-of-band orphan reaping
-- Reproduce task with a structured report and a replay command
-- **Independent evidence validation, including rejection of unsupported claims**
+- Reproduce task: the agent triages and reports its own findings to the issue
 
-### v0.2 — Local Fix-to-Draft-PR
+### v0.2 — Fix to draft PR *(next)*
 
-- Fix and verify task contracts
-- Independent verification in a separate clone, plus a local policy gate
-- Draft PR creation and comment/report templates
+- The fix task: the agent fixes, commits to its own branch and opens a **draft** PR itself
+- `retry` and `cancel` wired up — today they are recognised and declined
+- Verify running in its own clone, so a later stage cannot read refs an earlier one wrote
 - Optional rootless-Docker sandbox wrapper
 
 ### v0.3 — Extensibility
@@ -266,16 +313,18 @@ demonstrated, not assumed.
 ### Not planned
 
 A hosted backend, web dashboard, Postgres/Redis/Temporal/Kubernetes, remote workers by default,
-automatic merge, or a plugin registry. And above all: **no custom agent loop or planner.** That last
-one is existential — the moment IssueForge plans steps or calls a model, it becomes a coding agent
-with no moat.
+automatic merge, or a plugin registry.
+
+And above all: **no custom agent loop or planner, and no grading the agent's work.** The first is
+existential — the moment IssueForge plans steps or calls a model, it is a coding agent with no
+reason to exist. The second was tried and removed.
 
 ---
 
 ## Contributing
 
-Not open for contributions yet — the repository has no implementation to contribute to. Once Phase 0
-lands, `CONTRIBUTING.md` will cover the setup.
+Not open for outside contributions yet — the architecture is still moving, and it has changed twice
+in ways that deleted working code. `CONTRIBUTING.md` covers the setup if you want to run it anyway.
 
 Design principles, if you are reading the code later:
 

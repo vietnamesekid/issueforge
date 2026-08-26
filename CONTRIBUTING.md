@@ -1,6 +1,6 @@
 # Contributing
 
-> Pre-alpha. The monorepo foundation is in place; feature work has not started yet.
+> Pre-alpha. The reproduce task runs end to end; fix and verify are next.
 > The design was validated up front against the real GitHub Actions runner, the real Claude Code
 > CLI and real git behaviour, so the constraints below are measured rather than assumed.
 
@@ -37,9 +37,10 @@ contracts  ->  core  ->  adapters  ->  apps/cli
 ```
 
 - `packages/contracts` — schemas and types. Depends on nothing.
-- `packages/core` — state transitions, evidence validation, policy. **Imports only `contracts`**:
+- `packages/core` — state transitions, task cards, write boundaries, ports. **Imports only `contracts`**:
   no `execa`, no `node:sqlite`, no `gh`, no `node:fs`. I/O lives behind ports that adapters implement.
-- `packages/adapters` — all I/O. Harness adapters must not import the GitHub adapter, and vice versa.
+- `packages/adapters` — all I/O. No adapter calls the GitHub API: the harness reports its own
+  findings with `gh`. Enforced by `tests/import-boundaries.test.ts`.
 - `apps/cli` — composition root. Nothing imports it.
 
 `tests/import-boundaries.test.ts` enforces this and **fails CI** on a violation. It is the one piece
