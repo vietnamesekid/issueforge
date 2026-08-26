@@ -36,8 +36,9 @@ on:
     types: [labeled]
 
 permissions:
-  # `write` because the fix task pushes a branch. The agent still cannot reach
-  # \`.github/**\` — that is blocked by the write boundary, not by this token.
+  # Write because the fix task pushes a branch. The agent still cannot touch
+  # .github/** — that is blocked by the task card's write boundary, which the
+  # post-run audit enforces, not by the scope of this token.
   contents: write
   issues: write
   pull-requests: write
