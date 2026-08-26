@@ -11,3 +11,7 @@ docs/
 project_brief.md
 PROJECT_STATUS.md
 IMPLEMENTATION_PLAN.md
+
+# Copied from the repo root by scripts/sync-package-docs.mjs at pack time.
+apps/cli/README.md
+apps/cli/LICENSE

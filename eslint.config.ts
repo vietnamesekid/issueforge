@@ -51,11 +51,11 @@ export default defineConfig(
   },
 
   {
-    // `tests/` and `examples/` sit outside every package tsconfig, so the project
-    // service cannot type them. Lint them without type information rather than not at
+    // `tests/`, `examples/` and the packaging scripts sit outside every package
+    // tsconfig, so the project service cannot type them. Lint them without type information rather than not at
     // all. Bringing them under a tsconfig would mean making `tests/` a workspace
     // package so `@issueforge/*` resolves — more churn than the lint value justifies.
-    files: ['tests/**/*.ts', 'examples/**/*.js'],
+    files: ['tests/**/*.ts', 'examples/**/*.js', 'apps/*/scripts/**/*.mjs'],
     extends: [tseslint.configs.disableTypeChecked],
   },
 

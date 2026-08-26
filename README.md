@@ -15,8 +15,8 @@ the boundaries, the bookkeeping and the cleanup.
 > **You supply the judgement.**
 
 **Status: pre-alpha.** Reproduce and fix run end to end against real issues on a private
-repository, with Claude Code. Not published to npm, Codex is not supported yet, and the
-architecture is still moving — expect rough edges. See [Roadmap](#roadmap).
+repository, with Claude Code. Published on npm under the `alpha` tag only, Codex is not supported
+yet, and the architecture is still moving — expect rough edges. See [Roadmap](#roadmap).
 
 ---
 
@@ -226,6 +226,29 @@ PRs are not optional.
 
 ---
 
+## Install
+
+```bash
+npm install -g issueforge@alpha
+issueforge doctor
+```
+
+It is published under the `alpha` dist-tag deliberately, so a plain `npm install -g issueforge`
+does **not** resolve to it. Installing pre-alpha software that spawns coding agents on your
+machine should be something you opt into by name.
+
+Requires **Node.js >= 22.13** (see [Requirements](#requirements)). `issueforge doctor` checks
+every dependency a run needs and tells you how to fix whatever is missing — run it first.
+
+To upgrade, or to remove it:
+
+```bash
+npm install -g issueforge@alpha   # upgrade to the latest alpha
+npm uninstall -g issueforge       # remove it; `issueforge clean` first to drop local state
+```
+
+---
+
 ## Usage
 
 ```bash
@@ -251,10 +274,11 @@ The label path exits 0 instead, because a policy stop is not a failed run.
 
 ### Getting started
 
-1. `issueforge init` in the repository, then commit the generated workflow.
-2. `issueforge doctor` and fix anything it flags.
-3. Register a self-hosted runner labelled `issueforge` on that repository.
-4. Label an issue `issueforge:reproduce`.
+1. `npm install -g issueforge@alpha` (see [Install](#install)).
+2. `issueforge init` in the repository, then commit the generated workflow.
+3. `issueforge doctor` and fix anything it flags.
+4. Register a self-hosted runner labelled `issueforge` on that repository.
+5. Label an issue `issueforge:reproduce`.
 
 One thing `doctor` cannot check for you: a self-hosted runner does not inherit your interactive
 shell's `PATH`, so a version-managed Node (nvm, fnm, asdf, volta) is invisible to it and both

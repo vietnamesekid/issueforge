@@ -1,12 +1,14 @@
 {
   "name": "issueforge",
-  "version": "0.0.0",
+  "version": "0.1.0-alpha.1",
   "type": "module",
   "bin": {
-    "issueforge": "./dist/main.js"
+    "issueforge": "dist/main.js"
   },
   "files": [
-    "dist"
+    "dist",
+    "README.md",
+    "LICENSE"
   ],
   "engines": {
     "node": ">=22.13.0"
@@ -14,7 +16,9 @@
   "scripts": {
     "build": "tsc --build && tsup",
     "typecheck": "tsc --build --emitDeclarationOnly false",
-    "dev": "node src/main.ts"
+    "dev": "node src/main.ts",
+    "prepack": "node ./scripts/sync-package-docs.mjs",
+    "prepublishOnly": "pnpm -w check"
   },
   "dependencies": {
     "commander": "^12.1.0",
@@ -28,5 +32,29 @@
     "@issueforge/contracts": "workspace:*",
     "@issueforge/core": "workspace:*"
   },
-  "description": "Local-first GitHub IssueOps supervisor for coding-agent harnesses"
+  "description": "Local-first GitHub IssueOps supervisor for coding-agent harnesses",
+  "keywords": [
+    "github",
+    "issueops",
+    "coding-agent",
+    "claude-code",
+    "automation",
+    "self-hosted-runner",
+    "cli"
+  ],
+  "license": "Apache-2.0",
+  "author": "tranminhquang",
+  "homepage": "https://github.com/vietnamesekid/issueforge#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/vietnamesekid/issueforge.git",
+    "directory": "apps/cli"
+  },
+  "bugs": {
+    "url": "https://github.com/vietnamesekid/issueforge/issues"
+  },
+  "publishConfig": {
+    "access": "public",
+    "tag": "alpha"
+  }
 }

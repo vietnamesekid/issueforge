@@ -1,0 +1,15 @@
+# `files` in package.json already limits the tarball to dist/, README and LICENSE.
+# This handles what `files` cannot: entries INSIDE an included directory.
+
+# Incremental-build state written into dist/ by `tsc --build`. It is machine-specific,
+# useless to anyone installing the package, and added 84kB to the tarball.
+*.tsbuildinfo
+
+# Declarations are build output for the workspace's own project references; tsup
+# bundles the CLI, so nothing downstream imports these.
+*.d.ts
+*.d.ts.map
+*.js.map
+
+# The prepack script that copies README/LICENSE in has no business shipping.
+scripts/
