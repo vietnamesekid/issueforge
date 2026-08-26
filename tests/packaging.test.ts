@@ -8,8 +8,9 @@
  */
 import { describe, it, expect } from 'vitest';
 import { spawnSync } from 'node:child_process';
-import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { dirname, join } from 'node:path';
 
 const ROOT = new URL('..', import.meta.url).pathname;
 
@@ -123,15 +124,87 @@ describe('release workflow', () => {
     expect(ciRelease.indexOf('pnpm build')).toBeLessThan(ciRelease.indexOf('publish.mjs'));
   });
 
-  it('does not count a consumed changeset as pending work', () => {
-    // The bug this test exists for: in prerelease mode `changeset version` leaves the
-    // applied file on disk and records it in pre.json, so counting .changeset/*.md
-    // reports pending work forever. Observed here — one consumed changeset made a
-    // naive count say "true" while `changeset status` said there was nothing to bump,
-    // which would wake the release job on every push it was meant to skip.
-    const gate = readFileSync(join(ROOT, 'scripts/pending-changesets.mjs'), 'utf8');
-    expect(gate).toMatch(/pre\.json/);
-    expect(gate).toMatch(/applied\.has/);
+  describe('the pending-changesets gate', () => {
+    /**
+     * Runs the real script against a synthetic .changeset directory.
+     *
+     * The previous version of this test grepped the source for `pre.json` and
+     * `applied.has`, which asserted nothing about behaviour — it passed while the
+     * logic underneath it went stale, and would have passed with the filter deleted.
+     */
+    const gateOn = (files: Record<string, string>): string => {
+      const dir = mkdtempSync(join(tmpdir(), 'if-gate-'));
+      mkdirSync(join(dir, '.changeset'), { recursive: true });
+      for (const [name, body] of Object.entries(files)) {
+        const target = join(dir, '.changeset', name);
+        mkdirSync(dirname(target), { recursive: true });
+        writeFileSync(target, body);
+      }
+      // The script resolves .changeset relative to its own location, so it is copied
+      // in beside the fixture rather than imported.
+      mkdirSync(join(dir, 'scripts'), { recursive: true });
+      copyFileSync(
+        join(ROOT, 'scripts/pending-changesets.mjs'),
+        join(dir, 'scripts/pending-changesets.mjs'),
+      );
+
+      const result = spawnSync('node', [join(dir, 'scripts/pending-changesets.mjs')], {
+        encoding: 'utf8',
+      });
+      rmSync(dir, { recursive: true, force: true });
+      return result.stdout.trim();
+    };
+
+    it('reports pending work when a changeset is waiting', () => {
+      expect(gateOn({ 'README.md': 'docs', 'brave-cats-sing.md': '---\n---\nx' })).toBe(
+        'found=true',
+      );
+    });
+
+    it('does not count README.md, which is documentation and always present', () => {
+      expect(gateOn({ 'README.md': 'docs' })).toBe('found=false');
+    });
+
+    it('does not count a changeset CLI v2 already consumed', () => {
+      // v2 leaves the applied file on disk and records its name in pre.json. Counting
+      // .changeset/*.md therefore reported pending work forever — observed here, where
+      // one consumed changeset made the count say "true" while `changeset status` said
+      // there was nothing to bump, waking the release job on every push it should skip.
+      expect(
+        gateOn({
+          'README.md': 'docs',
+          'pre.json': JSON.stringify({ mode: 'pre', tag: 'alpha', changesets: ['used-one'] }),
+          'used-one.md': '---\n---\nalready applied',
+        }),
+      ).toBe('found=false');
+    });
+
+    it('does not count a changeset CLI v3 already consumed', () => {
+      // v3 dropped pre.json.changesets entirely and MOVES the applied file into
+      // .changeset/pre/ instead. Reading only top-level *.md is what keeps both shapes
+      // working: the directory never matches, and the v2 filter still applies when the
+      // field is there. A recursive walk here would count every consumed file again.
+      expect(
+        gateOn({
+          'README.md': 'docs',
+          'pre.json': JSON.stringify({ mode: 'pre', tag: 'alpha' }),
+          'pre/used-one.md': '---\n---\nalready applied',
+        }),
+      ).toBe('found=false');
+    });
+
+    it('still sees a NEW changeset alongside consumed ones', () => {
+      // The direction that actually costs a release: over-filtering means a real
+      // changeset never ships, and nothing would say so.
+      expect(
+        gateOn({
+          'README.md': 'docs',
+          'pre.json': JSON.stringify({ mode: 'pre', tag: 'alpha' }),
+          'pre/used-one.md': '---\n---\napplied',
+          'fresh-one.md': '---\n---\nnew work',
+        }),
+      ).toBe('found=true');
+    });
   });
 
   it('uses the changesets action v2 input and output names', () => {
