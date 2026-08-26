@@ -29,7 +29,7 @@ const VERSION = '0.0.0';
 /**
  * Exit codes, so a workflow step can branch on the outcome.
  *
- * A rejected claim is NOT an error: "the bug did not reproduce" is a successful run
+ * A negative finding is NOT an error: "the bug did not reproduce" is a successful run
  * that reached a negative conclusion, and conflating it with a crash would make the
  * two indistinguishable to anything scripting this.
  */
@@ -302,4 +302,11 @@ function resolveBaseSha(repo: string, ref: string): Sha {
   return sha as Sha;
 }
 
-buildProgram().parseAsync();
+buildProgram()
+  .parseAsync()
+  .catch((error: unknown) => {
+    // A stack trace is the wrong answer to "your config file has a typo". Anything
+    // reaching here is a condition the user can act on, so print the sentence and
+    // keep the trace for --verbose debugging rather than making it the interface.
+    fail(error instanceof Error ? error.message : String(error));
+  });
