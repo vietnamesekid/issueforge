@@ -122,9 +122,20 @@ describe('release workflow', () => {
     expect(ciRelease.indexOf('pnpm build')).toBeLessThan(ciRelease.indexOf('changeset publish'));
   });
 
-  it('runs the full gate before versioning or publishing anything', () => {
-    expect(release.indexOf('pnpm check')).toBeGreaterThan(-1);
-    expect(release.indexOf('pnpm check')).toBeLessThan(release.indexOf('changesets/action'));
+  it('only releases a commit whose CI went green', () => {
+    // The gate is no longer a step inside this workflow — it is CI, which this run
+    // is chained to. That is only safe if the conclusion is actually checked: a
+    // `workflow_run` trigger fires on FAILURE too, so without this condition a red
+    // build would publish. Manual dispatch has no upstream run, so it is exempt.
+    expect(release).toMatch(/workflow_run:/);
+    expect(release).toMatch(/workflow_run\.conclusion == 'success'/);
+  });
+
+  it('versions the commit CI tested, not the branch tip', () => {
+    // `workflow_run` checks out the default branch by default, not the commit that
+    // triggered it. Without an explicit ref, a push landing mid-run would be
+    // versioned and published having never been tested.
+    expect(release).toMatch(/workflow_run\.head_sha/);
   });
 
   it('lints the tarball npm will actually publish', () => {

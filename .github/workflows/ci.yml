@@ -26,22 +26,12 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
-      # `tsc --build` follows the project-reference graph and builds packages in
-      # dependency order, so typecheck no longer needs a prior build step.
-      - run: pnpm typecheck
+      # The whole gate, as one step, so CI and the release path cannot drift apart:
+      # typecheck, lint, the suite (which builds first — the cross-process race test
+      # runs against dist/, and the import-boundary check fails on a dependency
+      # violation), then publint against the packed tarball.
+      - run: pnpm check
 
-      - run: pnpm build
-
-      - run: pnpm lint
-
-      # Includes the import-boundary check (fails CI on a dependency-direction
-      # violation) and the cross-process race test, which runs against dist/.
-      - run: pnpm test
-
-      # Lints the PUBLISHED package, which no other step here can see: `pnpm check`
-      # type-checks and runs the source, while what reaches a user is the tarball.
-      # It packs the real thing and checks bin paths, exports and file layout —
-      # exactly the class of defect that shipped a bin npm silently strips.
       # Coverage runs on one matrix leg only: the number is identical across Node
       # versions, and two legs writing the same badge would race.
       - name: Coverage

@@ -17,8 +17,13 @@
 name: Release
 
 on:
-  push:
+  # Chained to CI rather than to the push itself. Both used to fire on every push to
+  # main, so the whole suite ran twice in parallel — and worse, a release could start
+  # while CI was still deciding whether the commit was good.
+  workflow_run:
+    workflows: [CI]
     branches: [main]
+    types: [completed]
   workflow_dispatch:
 
 concurrency:
@@ -31,9 +36,13 @@ permissions:
 jobs:
   release:
     runs-on: ubuntu-latest
-    # Never run in a fork: it has no npm identity, and the failure would be noise
-    # for a contributor who cannot fix it.
-    if: github.repository == 'vietnamesekid/issueforge'
+    # Never run in a fork: it has no npm identity, and the failure would be noise for
+    # a contributor who cannot fix it. And never release off a red CI run — the
+    # manual dispatch path has no upstream run to inspect, so it is allowed through.
+    if: >-
+      github.repository == 'vietnamesekid/issueforge'
+      && (github.event_name == 'workflow_dispatch'
+          || github.event.workflow_run.conclusion == 'success')
     permissions:
       # OIDC trusted publishing and the provenance attestation. Without id-token the
       # publish still succeeds but ships NO attestation, and that is invisible until
@@ -47,6 +56,10 @@ jobs:
         with:
           # changesets needs history to work out what changed since the last tag.
           fetch-depth: 0
+          # workflow_run starts from the default branch, not the commit that
+          # triggered CI, so the SHA has to be named explicitly or a release could
+          # version a different tree than the one that passed.
+          ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.ref }}
 
       - uses: pnpm/action-setup@v4
 
@@ -62,9 +75,10 @@ jobs:
       # an older one fails with a confusing auth error rather than naming the cause.
       - run: npm install -g npm@latest
 
-      # The full gate runs BEFORE anything is versioned or published. `ci:release`
-      # builds again, cheaply, so the tarball is built from the versioned manifest.
-      - run: pnpm check
+      # No `pnpm check` here: this run is gated on a green CI for the same commit, so
+      # repeating the suite would double every push for no new information. The one
+      # thing CI cannot cover is the tarball built from the BUMPED manifest, and
+      # `ci:release` rebuilds before `changeset publish` for exactly that reason.
 
       - uses: changesets/action@v1
         id: changesets
