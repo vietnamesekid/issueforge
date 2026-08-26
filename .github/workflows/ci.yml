@@ -43,7 +43,7 @@ jobs:
       # coverage improves — never lower it to make a red build green.
       - name: Enforce coverage floor
         if: matrix.node == '24'
-        run: node scripts/check-coverage.mjs 78
+        run: node scripts/check-coverage.mjs 82
 
       - name: CLI smoke test
         run: node apps/cli/dist/main.js --help

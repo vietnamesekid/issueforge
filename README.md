@@ -4,7 +4,7 @@
 
 [![CI](https://github.com/vietnamesekid/issueforge/actions/workflows/ci.yml/badge.svg)](https://github.com/vietnamesekid/issueforge/actions/workflows/ci.yml)
 [![npm](https://img.shields.io/npm/v/issueforge/alpha)](https://www.npmjs.com/package/issueforge)
-[![coverage](https://img.shields.io/badge/coverage-80%25-green)](#tests)
+[![coverage](https://img.shields.io/badge/coverage-85%25-brightgreen)](#tests)
 [![node](https://img.shields.io/node/v/issueforge)](https://nodejs.org)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue)](LICENSE)
 
@@ -300,7 +300,7 @@ pnpm check          # typecheck + lint + test — the gate CI runs
 pnpm test:coverage  # the same suite, with a coverage report
 ```
 
-Line coverage is 80%, and CI fails below a 78% floor — the badge reports, the floor
+Line coverage is 85%, and CI fails below an 82% floor — the badge reports, the floor
 enforces.
 
 Coverage is measured against `src/`, excluding barrel files, which re-export and so
