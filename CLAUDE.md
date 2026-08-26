@@ -192,11 +192,5 @@ exception.
   (`noExternal`) because `workspace:*` is unresolvable on a global install.
 - Commits: conventional prefix (`feat:`, `fix:`, `refactor:`), subject as a sentence describing
   the effect, body explaining *why* with measured evidence.
-
-## Further reading
-
-`README.md` and `CONTRIBUTING.md` are committed and self-contained. `project_brief.md`
-(design spec), `IMPLEMENTATION_PLAN.md`, `PROJECT_STATUS.md` and `docs/` are **gitignored
-working documents** — present on a developer's machine, absent in a fresh clone or CI. Read
-them when they exist, never link to them from committed files;
-`docs/engineering/code-conventions.md` is the long form of this file.
+- Keep this file self-contained: it is read in fresh clones and in the worktree a run gets, so
+  a pointer to an uncommitted file reads as a broken instruction. State the rule here instead.
