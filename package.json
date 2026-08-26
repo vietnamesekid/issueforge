@@ -9,12 +9,14 @@
   "packageManager": "pnpm@10.33.4",
   "scripts": {
     "build": "tsc --build && pnpm --filter issueforge exec tsup",
+    "clean": "rm -rf packages/*/dist apps/*/dist .tsbuild && find . -name 'tsconfig.tsbuildinfo' -not -path '*/node_modules/*' -delete",
     "typecheck": "tsc --build",
     "test": "pnpm build && vitest run",
     "test:watch": "vitest",
     "lint": "eslint .",
     "check": "pnpm typecheck && pnpm lint && pnpm test",
-    "test:unit": "vitest run"
+    "test:unit": "vitest run",
+    "build:clean": "pnpm clean && pnpm build"
   },
   "devDependencies": {
     "@types/node": "catalog:",

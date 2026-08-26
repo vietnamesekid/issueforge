@@ -4,7 +4,11 @@ import type { RunId, RunStatus, Sha } from '@issueforge/contracts';
 import { optionalDefined, RepoSlug, Sha as ShaSchema, Verdict } from '@issueforge/contracts';
 import { reapOrphans, FIX, REPRODUCE, type TaskDefinition } from '@issueforge/adapters';
 import { createContext } from './context.js';
-import { NotOurLabelError, parseEventFile } from './commands/handle-github-event.js';
+import {
+  NotOurLabelError,
+  parseEventFile,
+  type ParsedEvent,
+} from './commands/handle-github-event.js';
 import { runTask } from './commands/run-task.js';
 import { collectStatus, renderStatusTable } from './commands/status.js';
 import { hasBlockingProblem, renderDoctor, runDoctor } from './commands/doctor.js';
@@ -68,7 +72,10 @@ export function buildProgram(): Command {
         return;
       }
 
-      let event;
+      // Annotated rather than inferred from the assignment inside `try`: without it the
+      // declaration has no type at the point of use, which reads as `any` to a type-aware
+      // linter and gives up every check downstream.
+      let event: ParsedEvent;
       try {
         event = parseEventFile(options.eventPath);
       } catch (error) {
