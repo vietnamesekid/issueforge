@@ -46,6 +46,24 @@ describe('.github configuration', () => {
     }
   });
 
+  it('groups updates in EVERY ecosystem, not just the first', () => {
+    // The bug this test exists for: `groups` was set on the npm ecosystem and
+    // omitted on github-actions. `groups` is per-ecosystem and inherits nothing, so
+    // one round of action updates arrived as four separate PRs while npm correctly
+    // produced two. Grouping is the whole reason weekly updates are reviewable.
+    const config = parse(readFileSync(join(GITHUB, 'dependabot.yml'), 'utf8')) as {
+      updates?: { 'package-ecosystem'?: string; groups?: Record<string, unknown> }[];
+    };
+    const updates = config.updates ?? [];
+    expect(updates.length).toBeGreaterThan(0);
+    for (const u of updates) {
+      expect(
+        Object.keys(u.groups ?? {}).length,
+        `ecosystem "${u['package-ecosystem'] ?? '?'}" has no groups`,
+      ).toBeGreaterThan(0);
+    }
+  });
+
   it('routes vulnerability reports away from public issues', () => {
     // This project runs untrusted issue text through a coding agent on the
     // maintainer's machine; a vulnerability disclosed in a public issue is a

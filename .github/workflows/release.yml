@@ -47,7 +47,7 @@ jobs:
     outputs:
       found: ${{ steps.check.outputs.found }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.ref }}
       - id: check
@@ -71,7 +71,7 @@ jobs:
       contents: write
       pull-requests: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           # changesets needs history to work out what changed since the last tag.
           fetch-depth: 0
@@ -80,9 +80,9 @@ jobs:
           # version a different tree than the one that passed.
           ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.ref }}
 
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@v6
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: '24'
           cache: pnpm
@@ -99,16 +99,23 @@ jobs:
       # thing CI cannot cover is the tarball built from the BUMPED manifest, and
       # `ci:release` rebuilds before `changeset publish` for exactly that reason.
 
-      - uses: changesets/action@v1
+      # v2 renamed every input this uses (version -> version-script, publish ->
+      # publish-script, commit -> commit-message, title -> pr-title) and stopped
+      # accepting a token through the GITHUB_TOKEN environment variable — it must be
+      # passed as `github-token`. Merging the bump without these edits would leave
+      # the action running with no script and no token.
+      - uses: changesets/action@v2
         id: changesets
         with:
-          version: pnpm ci:version
-          publish: pnpm ci:release
-          commit: 'chore: version packages'
-          title: 'chore: version packages'
+          version-script: pnpm ci:version
+          publish-script: pnpm ci:release
+          commit-message: 'chore: version packages'
+          pr-title: 'chore: version packages'
+          github-token: ${{ secrets.GITHUB_TOKEN }}
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          # Provenance is opt-in per publish; changeset publish honours this env var.
+          # Provenance is opt-in per publish. scripts/publish.mjs also passes
+          # --provenance explicitly; this covers anything publishing through npm
+          # directly.
           NPM_CONFIG_PROVENANCE: 'true'
 
       # `changeset publish` creates the git tags. A GitHub Release makes them
@@ -117,7 +124,9 @@ jobs:
         if: steps.changesets.outputs.published == 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          PUBLISHED: ${{ steps.changesets.outputs.publishedPackages }}
+          # v2 renamed this output to kebab-case; the camelCase name resolves to an
+          # empty string, which would skip every release silently rather than fail.
+          PUBLISHED: ${{ steps.changesets.outputs.published-packages }}
         run: |
           echo "$PUBLISHED" | node -e '
             let s = "";

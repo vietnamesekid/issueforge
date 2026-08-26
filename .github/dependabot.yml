@@ -27,5 +27,13 @@ updates:
     directory: /
     schedule:
       interval: weekly
+    # Grouped for the same reason as npm above, and it was omitted here at first —
+    # the result was one PR per action (four at once for a single round of updates),
+    # while the npm ecosystem correctly produced two. `groups` is per-ecosystem and
+    # inherits nothing.
+    groups:
+      github-actions:
+        patterns: ['*']
+    open-pull-requests-limit: 5
     commit-message:
       prefix: 'chore'

@@ -133,6 +133,25 @@ describe('release workflow', () => {
     expect(gate).toMatch(/applied\.has/);
   });
 
+  it('uses the changesets action v2 input and output names', () => {
+    // The bug this test exists for: v2 renamed every input (version ->
+    // version-script, publish -> publish-script, commit -> commit-message, title ->
+    // pr-title) and the publishedPackages output to published-packages, and stopped
+    // reading a token from the GITHUB_TOKEN environment variable. None of that
+    // fails loudly — an unknown input is ignored and a renamed output resolves to
+    // an empty string, so the action would run with no script and skip every
+    // GitHub Release silently.
+    expect(release).toMatch(/changesets\/action@v2/);
+    expect(release).toMatch(/version-script:/);
+    expect(release).toMatch(/publish-script:/);
+    expect(release).toMatch(/github-token:/);
+    expect(release).toMatch(/outputs\.published-packages/);
+    // The v1 spellings must not linger anywhere in the file.
+    expect(release).not.toMatch(/outputs\.publishedPackages/);
+    expect(release).not.toMatch(/^\s+publish: /m);
+    expect(release).not.toMatch(/^\s+version: /m);
+  });
+
   it('only releases a commit whose CI went green', () => {
     // The gate is no longer a step inside this workflow — it is CI, which this run
     // is chained to. That is only safe if the conclusion is actually checked: a
