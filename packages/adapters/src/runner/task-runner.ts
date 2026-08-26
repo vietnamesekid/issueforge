@@ -10,6 +10,8 @@ import {
   type RepoSlug,
   type RunId,
   type RunState,
+  type TaskCard,
+  type TaskKind,
   type Sha,
 } from '@issueforge/contracts';
 import {
@@ -21,6 +23,7 @@ import {
   type AttemptFailure,
   type HarnessAdapter,
   type RunStore,
+  type TaskCardInput,
   type Workspace,
   type WorkspaceManager,
 } from '@issueforge/core';
@@ -30,7 +33,7 @@ import { auditWorkspace, WriteBoundaryError } from '../policy/index.js';
 import { runPath } from '../workspace/index.js';
 
 /**
- * Runs one reproduce attempt end to end.
+ * Runs one task attempt end to end.
  *
  * The ordering here is the whole point, and it is not arbitrary: cancellation gives
  * the process about seven and a half seconds before its tree is killed, so every
@@ -39,7 +42,23 @@ import { runPath } from '../workspace/index.js';
  * recorded.
  */
 
-export interface ReproduceRunnerDeps {
+/**
+ * What makes an attempt a *reproduce* rather than a *fix*.
+ *
+ * Everything else in this file is task-neutral: the lock, the workspace, the
+ * transcript, the ownership record, the audit, and above all the ORDER those happen
+ * in. Injecting the three task-specific values is what stops a second task copying
+ * 300 lines of crash-safety ordering and letting one copy rot.
+ */
+export interface TaskDefinition {
+  kind: TaskKind;
+  /** Builds the brief the harness receives. */
+  buildCard(input: TaskCardInput): TaskCard;
+  /** JSON Schema for the structured summary the harness returns for the ledger. */
+  resultSchema: unknown;
+}
+
+export interface TaskRunnerDeps {
   store: RunStore;
   workspaces: WorkspaceManager;
   harness: HarnessAdapter;
@@ -49,7 +68,7 @@ export interface ReproduceRunnerDeps {
   root: string;
 }
 
-export interface ReproduceRequest {
+export interface TaskRequest {
   repo: RepoSlug;
   issueNumber: number;
   issue: { number: number; title: string; body: string };
@@ -64,7 +83,7 @@ export interface ReproduceRequest {
   githubToken?: string;
 }
 
-export interface ReproduceResult {
+export interface TaskResult {
   runId: RunId;
   status: RunState['status'];
   detail: string;
@@ -89,14 +108,16 @@ export class IssueBusyError extends Error {
   }
 }
 
-export class ReproduceRunner {
-  readonly #deps: ReproduceRunnerDeps;
+export class TaskRunner {
+  readonly #deps: TaskRunnerDeps;
+  readonly #task: TaskDefinition;
 
-  constructor(deps: ReproduceRunnerDeps) {
+  constructor(deps: TaskRunnerDeps, task: TaskDefinition = REPRODUCE) {
+    this.#task = task;
     this.#deps = deps;
   }
 
-  async run(request: ReproduceRequest): Promise<ReproduceResult> {
+  async run(request: TaskRequest): Promise<TaskResult> {
     const { store, logger } = this.#deps;
 
     // Before anything else. A previous run killed outright cannot have cleaned up
@@ -114,7 +135,7 @@ export class ReproduceRunner {
       id: runId,
       repo: request.repo,
       issueNumber: request.issueNumber,
-      task: 'reproduce',
+      task: this.#task.kind,
       status: 'queued',
       baseSha: request.baseSha,
       harness: this.#deps.harness.name,
@@ -153,9 +174,9 @@ export class ReproduceRunner {
 
   async #attempt(
     runId: RunId,
-    request: ReproduceRequest,
+    request: TaskRequest,
     onWorkspace: (workspace: Workspace) => void,
-  ): Promise<ReproduceResult> {
+  ): Promise<TaskResult> {
     const { store, workspaces, harness, config, logger, root } = this.#deps;
 
     store.updateRun(runId, { status: 'running' });
@@ -163,14 +184,14 @@ export class ReproduceRunner {
     const workspace = await workspaces.create({
       repo: request.repo,
       issueNumber: request.issueNumber,
-      task: 'reproduce',
+      task: this.#task.kind,
       remote: request.remote,
       baseSha: request.baseSha,
     });
     onWorkspace(workspace);
     store.updateRun(runId, { workdir: workspace.path });
 
-    const card = buildReproduceCard({
+    const card = this.#task.buildCard({
       issue: request.issue,
       repo: request.repo,
       baseSha: request.baseSha,
@@ -196,7 +217,7 @@ export class ReproduceRunner {
       cwd: workspace.path,
       taskCard: card,
       taskCardPath,
-      resultSchema: REPRODUCE_RESULT_SCHEMA,
+      resultSchema: this.#task.resultSchema,
       sessionId: randomUUID(),
       envAllow: config.env.allow,
       ...optionalDefined('githubToken', request.githubToken),
@@ -260,7 +281,7 @@ export class ReproduceRunner {
     attempt: number,
     classification: ReturnType<typeof classifyAttempt>,
     outcome: HarnessRunOutcome | undefined,
-  ): ReproduceResult {
+  ): TaskResult {
     const { store } = this.#deps;
 
     store.finishAttempt(runId, {
@@ -350,3 +371,16 @@ function toFailure(error: unknown): AttemptFailure {
 
   return { kind: 'crash', message: error instanceof Error ? error.message : String(error) };
 }
+
+/**
+ * The reproduce task.
+ *
+ * The default, and for now the only one — `fix` and `verify` are v0.2. It is a value
+ * rather than a hardcoded branch so adding the second task is writing another one of
+ * these, not editing the runner.
+ */
+export const REPRODUCE: TaskDefinition = {
+  kind: 'reproduce',
+  buildCard: buildReproduceCard,
+  resultSchema: REPRODUCE_RESULT_SCHEMA,
+};

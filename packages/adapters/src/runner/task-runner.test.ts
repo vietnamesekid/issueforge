@@ -21,7 +21,7 @@ import {
 import { SqliteRunStore } from '../state/index.js';
 import { GitWorkspaceManager } from '../workspace/index.js';
 import { createLogger } from '../logger/index.js';
-import { ReproduceRunner, IssueBusyError } from './reproduce-runner.js';
+import { TaskRunner, IssueBusyError } from './task-runner.js';
 
 let dir: string;
 let origin: string;
@@ -79,7 +79,7 @@ class FakeHarness implements HarnessAdapter {
 }
 
 let harness: FakeHarness;
-let runner: ReproduceRunner;
+let runner: TaskRunner;
 
 beforeEach(() => {
   dir = mkdtempSync(join(tmpdir(), 'if-run-'));
@@ -97,7 +97,7 @@ beforeEach(() => {
   store = new SqliteRunStore(join(root, 'state.db'));
   store.migrate();
   harness = new FakeHarness();
-  runner = new ReproduceRunner({
+  runner = new TaskRunner({
     store,
     workspaces: new GitWorkspaceManager(root),
     harness,
@@ -130,7 +130,7 @@ const claimed = (verdict: string): HarnessRunOutcome => ({
   result: { verdict, summary: 's', reproCommand: ['npm', 'test'], testFile: 't.js' },
 } as HarnessRunOutcome);
 
-describe('ReproduceRunner', { timeout: 30_000 }, () => {
+describe('TaskRunner', { timeout: 30_000 }, () => {
   it('runs a full attempt and records it', async () => {
     harness.events = [
       { type: 'session_started', sessionId: 's1', tools: [], mcpServers: [] },

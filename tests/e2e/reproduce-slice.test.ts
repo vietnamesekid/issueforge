@@ -15,7 +15,7 @@ import { IssueForgeConfig as ConfigSchema } from '@issueforge/contracts';
 import { HarnessContractError, type HarnessAdapter, type HarnessRun } from '@issueforge/core';
 import {
   GitWorkspaceManager,
-  ReproduceRunner,
+  TaskRunner,
   SqliteRunStore,
   createLogger,
   reapOrphans,
@@ -104,7 +104,7 @@ class ScriptedHarness implements HarnessAdapter {
 }
 
 let harness: ScriptedHarness;
-let runner: ReproduceRunner;
+let runner: TaskRunner;
 
 beforeEach(() => {
   dir = mkdtempSync(join(tmpdir(), 'if-e2e-'));
@@ -115,7 +115,7 @@ beforeEach(() => {
   store = new SqliteRunStore(join(root, 'state.db'));
   store.migrate();
   harness = new ScriptedHarness();
-  runner = new ReproduceRunner({
+  runner = new TaskRunner({
     store,
     workspaces: new GitWorkspaceManager(root),
     harness,

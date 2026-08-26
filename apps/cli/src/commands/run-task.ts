@@ -5,7 +5,7 @@ import {
   type RunStatus,
   type Sha,
 } from '@issueforge/contracts';
-import { ReproduceRunner, IssueBusyError } from '@issueforge/adapters';
+import { TaskRunner, IssueBusyError } from '@issueforge/adapters';
 import type { AppContext } from '../context.js';
 
 /**
@@ -53,7 +53,7 @@ export async function runReproduceTask(
   context: AppContext,
   options: RunTaskOptions,
 ): Promise<RunTaskOutput> {
-  const runner = new ReproduceRunner({
+  const runner = new TaskRunner({
     store: context.store,
     workspaces: context.workspaces,
     harness: context.harness,
