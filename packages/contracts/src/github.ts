@@ -33,11 +33,12 @@ export const GitHubIssueEvent = z
   .loose();
 
 /**
- * Intent labels applied by a maintainer.
+ * Intent labels applied by a maintainer. These are the only labels IssueForge reads.
  *
- * Status labels are OUTPUTS ONLY, never triggers: GitHub does not create workflow
- * runs from events triggered by GITHUB_TOKEN, so a label IssueForge writes can never
- * start the next stage. Every transition is driven by a human.
+ * There is no matching set of status labels, because IssueForge does not write labels:
+ * the harness reports its findings to the issue itself. Even if it did, a label written
+ * with GITHUB_TOKEN cannot start the next stage — GitHub does not create workflow runs
+ * from GITHUB_TOKEN events — so every transition is driven by a human either way.
  */
 export const INTENT_LABELS = {
   'issueforge:reproduce': 'reproduce',
@@ -46,19 +47,6 @@ export const INTENT_LABELS = {
   'issueforge:cancel': 'cancel',
 } as const;
 
-export const STATUS_LABELS = [
-  'issueforge:queued',
-  'issueforge:running',
-  'issueforge:reproduced',
-  'issueforge:cannot-reproduce',
-  'issueforge:needs-info',
-  'issueforge:fix-pr-open',
-  'issueforge:verification-failed',
-  'issueforge:ready-for-review',
-  'issueforge:blocked',
-  'issueforge:cancelled',
-] as const;
 
 export type GitHubIssueEvent = z.infer<typeof GitHubIssueEvent>;
 export type IntentLabel = keyof typeof INTENT_LABELS;
-export type StatusLabel = (typeof STATUS_LABELS)[number];

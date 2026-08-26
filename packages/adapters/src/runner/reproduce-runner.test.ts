@@ -132,7 +132,10 @@ describe('ReproduceRunner', { timeout: 30_000 }, () => {
 
     const result = await runner.run(request());
 
-    expect(result.status).toBe('running'); // a claim exists; IF-010 decides the verdict
+    // A completed run reaches a terminal state. It read 'running' until the
+    // validator it deferred to was removed, which left every successful run
+    // looking unfinished and exiting non-zero.
+    expect(result.status).toBe('reproduced');
     expect(result.outcome?.result?.verdict).toBe('reproduced');
 
     const run = store.getRun(result.runId);

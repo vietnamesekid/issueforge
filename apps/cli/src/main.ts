@@ -257,16 +257,23 @@ export function buildProgram(): Command {
   return program;
 }
 
+/**
+ * Statuses that mean the harness ran and reached a conclusion.
+ *
+ * `needs-info` belongs here: "I could not tell from this issue" is a real finding,
+ * reported to the issue for a human to act on. Exiting non-zero for it would mark a
+ * working run as a broken one in the Actions UI, training maintainers to ignore red.
+ * A non-zero exit is reserved for IssueForge itself failing.
+ */
+const CONCLUDED: readonly string[] = ['reproduced', 'cannot-reproduce', 'needs-info'];
+
 function report(result: { runId: string; status: string; detail: string }, json: boolean): void {
   if (json) emit(result);
   else process.stdout.write(`${result.status}: ${result.detail}\n`);
 
-  process.exitCode =
-    result.status === 'blocked'
-      ? EXIT.blocked
-      : result.status === 'reproduced' || result.status === 'cannot-reproduce'
-        ? EXIT.ok
-        : EXIT.failed;
+  if (result.status === 'blocked') process.exitCode = EXIT.blocked;
+  else if (CONCLUDED.includes(result.status)) process.exitCode = EXIT.ok;
+  else process.exitCode = EXIT.failed;
 }
 
 /** Machine-readable output goes to stdout; logs go to stderr, so the two never mix. */

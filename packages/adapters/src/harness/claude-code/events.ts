@@ -221,11 +221,11 @@ function parseResult(line: ResultLine): ParsedLine {
  * Interpret the harness's structured claim.
  *
  * Returns null when there is nothing schema-valid to read. That is not a failure of
- * the run — it means there is no claim to verify, which the evidence validator will
+ * the run — it means the harness reported nothing structured, which the runner
  * treat as `needs-info`.
  *
  * A real agent returned `reproCommand` as one space-joined string rather than argv,
- * so it is normalised here: the validator must never have to guess whether it was
+ * so it is normalised here: no reader should have to guess whether it was
  * handed a command or a sentence.
  */
 export function readClaim(structured: unknown): HarnessResult | null {

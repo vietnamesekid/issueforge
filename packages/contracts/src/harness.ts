@@ -93,7 +93,7 @@ export const HarnessResult = z.object({
    * knows what this repository needs — an install, a build, a codegen step — and we
    * do not, so it tells us rather than us guessing. Verified the hard way: a live run
    * produced a perfectly good vitest test whose command could not run, and the
-   * validator correctly reported an environmental failure rather than a reproduction.
+   * run correctly reported an environmental failure rather than a reproduction.
    */
   setupCommand: Argv.optional(),
   /** Substring the replay output is expected to contain, if the harness names one. */

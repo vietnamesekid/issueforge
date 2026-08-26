@@ -94,28 +94,23 @@ describe('dependency direction', () => {
     expect(bad, `the CLI is a composition root; nothing may import it:\n${bad.join('\n')}`).toEqual([]);
   });
 
-  it('harness adapters do not import the GitHub adapter, and vice versa', () => {
-    // Keeps GitHub integration ignorant of harness details and harnesses ignorant
-    // that GitHub exists. Both directories are created later (IF-008 / IF-011).
+  it('no adapter talks to GitHub directly — the harness reports its own findings', () => {
+    // ARCH-2: IssueForge does not post comments, open PRs, or write labels. The
+    // harness already has `gh` and its own judgement about what to say; a second
+    // renderer here would only produce a worse version of the same message.
+    //
+    // This asserts on directories that EXIST. The predecessor guarded three paths
+    // that had been deleted, caught its own ENOENT, and passed by checking nothing.
     const bad: string[] = [];
-    const pairs: Array<[string, string]> = [
-      ['packages/adapters/src/harness-claude-code', 'github'],
-      ['packages/adapters/src/harness-codex', 'github'],
-      ['packages/adapters/src/github', 'harness-'],
-    ];
-    for (const [dir, forbidden] of pairs) {
-      let files: string[] = [];
-      try {
-        files = sourceFiles(join(ROOT, dir));
-      } catch {
-        continue; // directory does not exist yet
-      }
-      for (const f of files) {
-        for (const spec of imports(f)) {
-          if (spec.includes(forbidden)) bad.push(`${f}: ${spec}`);
-        }
+    for (const f of sourceFiles(join(ROOT, 'packages/adapters/src'))) {
+      if (f.endsWith('.test.ts')) continue;
+      for (const spec of imports(f)) {
+        if (/@octokit|\bgithub-api\b/.test(spec)) bad.push(`${f}: ${spec}`);
       }
     }
-    expect(bad, `harness and GitHub layers must not know about each other:\n${bad.join('\n')}`).toEqual([]);
+    expect(
+      bad,
+      `adapters must not call the GitHub API; the harness reports its own findings:\n${bad.join('\n')}`,
+    ).toEqual([]);
   });
 });

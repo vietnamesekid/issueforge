@@ -7,7 +7,7 @@ import { join } from 'node:path';
  *
  * `parsePair` splits on every `=`, so a value that itself contains one is truncated.
  * It is deliberately the kind of defect that looks fine at a glance and has a passing
- * test suite — a fixture whose bug is obvious would let a validator pass by accident.
+ * test suite — a fixture whose bug is obvious would let a run pass by accident.
  */
 
 export const BUGGY_SOURCE = `export function parsePair(s) {

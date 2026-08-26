@@ -1,7 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
   Argv,
-  Evidence,
   GitHubIssueEvent,
   HarnessEvent,
   HarnessResult,
@@ -9,8 +8,8 @@ import {
   RunState,
   Sha,
   TaskCard,
-  ValidationOutcome,
   Verdict,
+  RunStatus,
 } from './index.js';
 
 const SHA = 'a'.repeat(40);
@@ -103,37 +102,21 @@ describe('HarnessResult', () => {
 });
 
 describe('Verdict', () => {
-  it('is the SAME set for a harness claim and a validation outcome', () => {
-    // The product is comparing the two: a claim of `reproduced` that independent
-    // replay downgrades to `cannot-reproduce` is the case this design exists to
-    // catch. If the enums ever drifted apart, that comparison would be meaningless.
+  it('is the same set a harness may claim', () => {
     expect(Verdict.options).toEqual(HarnessResult.shape.verdict.options);
-    expect(Verdict.options).toEqual(ValidationOutcome.shape.verdict.options);
     expect(Verdict.options).toEqual(['reproduced', 'cannot-reproduce', 'needs-info']);
   });
-});
 
-describe('Evidence', () => {
-  it('records what IssueForge observed, including the differential replay', () => {
-    const ev = Evidence.parse({
-      baseSha: SHA,
-      changedFiles: ['test/repro.test.js'],
-      baseReplay: { command: ['npm', 'test'], exitCode: 1, durationMs: 120 },
-      postFixReplay: { command: ['npm', 'test'], exitCode: 0, durationMs: 118 },
-      checks: [{ step: 'replay-fails-on-base', passed: true }],
-    });
-    // fails on base, passes after the fix -> a genuine reproduction
-    expect(ev.baseReplay?.exitCode).toBe(1);
-    expect(ev.postFixReplay?.exitCode).toBe(0);
-    expect(ev.checks[0]?.step).toBe('replay-fails-on-base');
-  });
-
-  it('rejects an unknown validation step', () => {
-    expect(
-      Evidence.safeParse({ baseSha: SHA, checks: [{ step: 'vibes', passed: true }] }).success,
-    ).toBe(false);
+  it('is a SUBSET of RunStatus, because a verdict is recorded as the run status', () => {
+    // classifyAttempt() stores the harness's verdict directly in the run's status
+    // field. If a verdict were ever added without a matching status, that write
+    // would produce a row the ledger cannot represent.
+    for (const verdict of Verdict.options) {
+      expect(RunStatus.options).toContain(verdict);
+    }
   });
 });
+
 
 describe('RunState', () => {
   const base = {

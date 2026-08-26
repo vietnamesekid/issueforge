@@ -5,7 +5,6 @@
 export * from './common.js';
 export * from './task-card.js';
 export * from './harness.js';
-export * from './evidence.js';
 export * from './run.js';
 export * from './config.js';
 export * from './github.js';

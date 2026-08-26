@@ -152,7 +152,7 @@ describe('parseLine', () => {
 
 describe('readClaim', () => {
   it('normalises a space-joined reproCommand to argv', () => {
-    // A real agent returned exactly this shape. The validator must never have to
+    // A real agent returned exactly this shape. Nothing downstream should have to
     // guess whether it was handed a command or a sentence.
     const claim = readClaim({
       verdict: 'reproduced',
@@ -173,7 +173,7 @@ describe('readClaim', () => {
   });
 
   it('returns null when there is no schema-valid claim to verify', () => {
-    // Not a run failure — it means there is nothing to check, which the validator
+    // Not a run failure — it means there is nothing structured to record, which
     // treats as needs-info.
     expect(readClaim(undefined)).toBeNull();
     expect(readClaim('nope')).toBeNull();

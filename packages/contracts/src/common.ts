@@ -28,7 +28,7 @@ export const RepoSlug = z
  *     neutralises `$(...)`, backticks and `;` in a hostile issue body.
  *  2. Reality: a real agent returned its repro command as a single space-joined
  *     string ("node --test test/x.js"). Adapters must normalise to argv before the
- *     validator sees it; the validator never assumes it was given argv already.
+ *     reader sees it; nothing downstream assumes it was given argv already.
  */
 export const Argv = z.array(z.string().min(1)).min(1, 'expected a non-empty argv array');
 
