@@ -18,8 +18,8 @@
   "dependencies": {
     "@issueforge/contracts": "workspace:*",
     "@issueforge/core": "workspace:*",
-    "execa": "^10.0.1",
-    "pino": "^10.3.1"
+    "execa": "^10.1.0",
+    "pino": "^10.4.0"
   },
   "devDependencies": {
     "@types/node": "catalog:"
