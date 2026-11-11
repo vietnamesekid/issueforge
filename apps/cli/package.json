@@ -21,10 +21,10 @@
     "prepublishOnly": "pnpm -w check"
   },
   "dependencies": {
-    "commander": "^15.0.0",
-    "pino": "^10.3.1",
-    "execa": "^10.0.1",
-    "zod": "^4.4.3"
+    "commander": "^15.1.0",
+    "pino": "^10.4.0",
+    "execa": "^10.2.1",
+    "zod": "^4.6.7"
   },
   "devDependencies": {
     "@types/node": "catalog:",
